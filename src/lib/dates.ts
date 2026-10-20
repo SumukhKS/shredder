@@ -1,0 +1,52 @@
+/** Local calendar day as YYYY-MM-DD (the user's day, not UTC). */
+export function toDay(date: Date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function addDays(day: string, delta: number): string {
+  const [y, m, d] = day.split('-').map(Number);
+  return toDay(new Date(y, m - 1, d + delta));
+}
+
+export function fromDay(day: string): Date {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+export function dayLabel(day: string): string {
+  const today = toDay();
+  if (day === today) return 'Today';
+  if (day === addDays(today, -1)) return 'Yesterday';
+  if (day === addDays(today, 1)) return 'Tomorrow';
+  return fromDay(day).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+export function formatDuration(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0 && sec === 0) return `${m}m`;
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+export function clock(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const mm = String(m).padStart(h > 0 ? 2 : 1, '0');
+  const ss = String(sec).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+export function greeting(date = new Date()): string {
+  const h = date.getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
