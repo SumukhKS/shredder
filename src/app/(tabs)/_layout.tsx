@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Tabs, useRouter } from 'expo-router';
 import type { BottomTabBarProps } from 'expo-router/tabs';
 import { useEffect, useState } from 'react';
@@ -7,8 +8,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
-import { hardShadow, Radius, Space } from '@/constants/theme';
+import { glow, Gradients, Radius, Space } from '@/constants/theme';
 import { clock } from '@/lib/dates';
+import { useTodayLayout } from '@/stores/today-layout';
 import { completedSetCount, useWorkout } from '@/stores/workout';
 
 const TABS: { name: string; label: string; icon: keyof typeof Ionicons.glyphMap; iconOn: keyof typeof Ionicons.glyphMap }[] = [
@@ -31,6 +33,8 @@ export default function TabLayout() {
 function TabBar({ state, navigateToTab }: BottomTabBarProps) {
   const c = useColors();
   const insets = useSafeAreaInsets();
+  // Tabs turned off under Customize layout drop out of the bar.
+  const hiddenTabs = useTodayLayout((s) => s.hiddenTabs as string[]);
   return (
     <View style={{ backgroundColor: c.bg }}>
       <ActiveWorkoutBanner />
@@ -38,11 +42,11 @@ function TabBar({ state, navigateToTab }: BottomTabBarProps) {
         style={[
           styles.bar,
           { backgroundColor: c.surface, borderColor: c.border, marginBottom: Math.max(insets.bottom, Space.md) },
-          hardShadow(c.shadow, 4),
+          glow('rgba(255,90,31,0.10)', 20),
         ]}>
         {state.routes.map((route, index) => {
           const tab = TABS.find((t) => t.name === route.name);
-          if (!tab) return null;
+          if (!tab || hiddenTabs.includes(tab.name)) return null;
           const focused = state.index === index;
           return (
             <Pressable
@@ -53,9 +57,17 @@ function TabBar({ state, navigateToTab }: BottomTabBarProps) {
               onPress={() => {
                 if (!focused) navigateToTab(route.key);
               }}
-              style={[styles.item, focused && { backgroundColor: c.primarySoft }]}>
-              <Ionicons name={focused ? tab.iconOn : tab.icon} size={22} color={focused ? c.primary : c.textMuted} />
-              <AppText variant="smallBold" color={focused ? 'primary' : 'textMuted'} style={{ fontSize: 11 }}>
+              style={[styles.item, focused && glow(c.glow, 14)]}>
+              {focused ? (
+                <LinearGradient
+                  colors={Gradients.blaze}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[StyleSheet.absoluteFill, { borderRadius: Radius.row }]}
+                />
+              ) : null}
+              <Ionicons name={focused ? tab.iconOn : tab.icon} size={22} color={focused ? c.onPrimary : c.textMuted} />
+              <AppText variant="smallBold" color={focused ? 'onPrimary' : 'textMuted'} style={{ fontSize: 11 }}>
                 {tab.label}
               </AppText>
             </Pressable>
@@ -86,15 +98,21 @@ function ActiveWorkoutBanner() {
       accessibilityRole="button"
       accessibilityLabel="Resume workout"
       onPress={() => router.push('/workout/active')}
-      style={[styles.banner, { backgroundColor: c.xp, borderColor: c.border }]}>
-      <Ionicons name="barbell" size={18} color="#FFFFFF" />
-      <AppText variant="bodyBold" color="#FFFFFF" style={{ flex: 1 }} numberOfLines={1}>
+      style={[styles.banner, { borderColor: c.border }]}>
+      <LinearGradient
+        colors={Gradients.blaze}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[StyleSheet.absoluteFill, { borderRadius: Radius.row - 2 }]}
+      />
+      <Ionicons name="barbell" size={18} color={c.onAccent} />
+      <AppText variant="bodyBold" color={c.onAccent} style={{ flex: 1 }} numberOfLines={1}>
         {active.name}
       </AppText>
-      <AppText variant="smallBold" color="#FFFFFF">
+      <AppText variant="smallBold" color={c.onAccent}>
         {completedSetCount(active)} sets, {clock(elapsed)}
       </AppText>
-      <Ionicons name="chevron-up" size={18} color="#FFFFFF" />
+      <Ionicons name="chevron-up" size={18} color={c.onAccent} />
     </Pressable>
   );
 }
@@ -106,7 +124,7 @@ const styles = StyleSheet.create({
     padding: 6,
     gap: 4,
     borderRadius: Radius.card,
-    borderWidth: 2,
+    borderWidth: 1,
   },
   item: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: 8, borderRadius: Radius.row },
   banner: {

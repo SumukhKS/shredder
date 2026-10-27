@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { hardShadow, Radius, Space } from '@/constants/theme';
+import { Gradients, hardShadow, Radius, Space } from '@/constants/theme';
 
 import { AppText } from './text';
 import { useColors } from './theme';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'xp';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'accent';
 
 export interface ButtonProps {
   label: string;
@@ -22,7 +23,8 @@ export interface ButtonProps {
 }
 
 /**
- * Chunky button that physically "presses into" its hard shadow.
+ * Chunky button that physically "presses into" its hard shadow. Primary buttons
+ * are a blaze gradient, secondary ones raised dark surfaces.
  */
 export function Button({
   label,
@@ -38,7 +40,7 @@ export function Button({
   const c = useColors();
   const palette: Record<Variant, { bg: string; fg: string; border: string; shadow: boolean }> = {
     primary: { bg: c.primary, fg: c.onPrimary, border: c.border, shadow: true },
-    xp: { bg: c.xp, fg: '#FFFFFF', border: c.border, shadow: true },
+    accent: { bg: c.accent, fg: c.onAccent, border: c.border, shadow: true },
     secondary: { bg: c.surface, fg: c.text, border: c.border, shadow: true },
     danger: { bg: c.surface, fg: c.danger, border: c.danger, shadow: false },
     ghost: { bg: 'transparent', fg: c.primary, border: 'transparent', shadow: false },
@@ -47,6 +49,7 @@ export function Button({
   const height = size === 'lg' ? 58 : size === 'sm' ? 38 : 50;
   const offset = size === 'sm' ? 2 : 4;
   const inactive = disabled || loading;
+  const face = variant === 'primary' ? Gradients.blaze : variant === 'secondary' ? Gradients.sheen : null;
 
   return (
     <Pressable
@@ -71,6 +74,15 @@ export function Button({
         p.shadow && pressed ? { transform: [{ translateX: offset }, { translateY: offset }] } : null,
         style,
       ]}>
+      {face ? (
+        <LinearGradient
+          pointerEvents="none"
+          colors={face}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[StyleSheet.absoluteFill, { borderRadius: Radius.row - 2 }]}
+        />
+      ) : null}
       {loading ? (
         <ActivityIndicator color={p.fg} />
       ) : (

@@ -1,4 +1,6 @@
-import { RefreshControl, ScrollView, StyleSheet, View, type ScrollViewProps } from 'react-native';
+import { KeyboardAvoidingView, StyleSheet, View, type ScrollViewProps } from 'react-native';
+import { ScrollView as GHScrollView, RefreshControl } from 'react-native-gesture-handler';
+import Animated, { type AnimatedRef } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Space } from '@/constants/theme';
@@ -15,7 +17,15 @@ interface ScreenProps extends ScrollViewProps {
   /** Tab screens draw their own top inset; stack screens with a header don't. */
   padTop?: boolean;
   footer?: React.ReactNode;
+  /** Lets a drag-and-drop list inside scroll the screen (see `Sortable`). */
+  scrollRef?: AnimatedRef<Animated.ScrollView>;
 }
+
+/**
+ * Scroll view that takes part in gesture handling, so a drag handle inside it wins the touch
+ * instead of the page starting to scroll (Android's own scroll view steals it otherwise).
+ */
+export const GestureScrollView = Animated.createAnimatedComponent(GHScrollView);
 
 export function Screen({
   title,
@@ -25,6 +35,7 @@ export function Screen({
   onRefresh,
   padTop = true,
   footer,
+  scrollRef,
   children,
   contentContainerStyle,
   ...rest
@@ -32,13 +43,22 @@ export function Screen({
   const c = useColors();
   const insets = useSafeAreaInsets();
   return (
-    <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <ScrollView
+    // Padding for the keyboard keeps a focused field scrollable into view (Android draws edge to edge).
+    <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: c.bg }}>
+      <GestureScrollView
+        ref={scrollRef as never}
         keyboardShouldPersistTaps="handled"
         contentInsetAdjustmentBehavior="automatic"
-        refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={c.primary} /> : undefined}
+        refreshControl={
+          onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={c.primary} /> : undefined
+        }
         contentContainerStyle={[
-          { paddingTop: padTop ? insets.top + Space.lg : Space.lg, paddingBottom: 120, paddingHorizontal: Space.lg, gap: Space.lg },
+          {
+            paddingTop: padTop ? insets.top + Space.lg : Space.lg,
+            paddingBottom: 120,
+            paddingHorizontal: Space.lg,
+            gap: Space.lg,
+          },
           contentContainerStyle,
         ]}
         {...rest}>
@@ -56,9 +76,11 @@ export function Screen({
           </View>
         ) : null}
         {children}
-      </ScrollView>
+      </GestureScrollView>
+      {/* The status bar is transparent (edge to edge), so give it a solid strip to keep content from scrolling under it. */}
+      {padTop ? <View pointerEvents="none" style={[styles.statusBar, { height: insets.top, backgroundColor: c.bg }]} /> : null}
       {footer}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -90,6 +112,7 @@ export function EmptyState({ title, body, action }: { title: string; body: strin
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
+  statusBar: { position: 'absolute', top: 0, left: 0, right: 0 },
   empty: {
     borderWidth: 2,
     borderStyle: 'dashed',

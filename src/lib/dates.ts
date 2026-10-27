@@ -50,3 +50,14 @@ export function greeting(date = new Date()): string {
   if (h < 17) return 'Good afternoon';
   return 'Good evening';
 }
+
+/** The Monday that starts the week containing `day`. */
+export function mondayOf(day: string): string {
+  const offset = (fromDay(day).getDay() + 6) % 7;
+  return addDays(day, -offset);
+}
+
+/** The first day of the month containing `day`. */
+export function firstOfMonth(day: string): string {
+  return `${day.slice(0, 7)}-01`;
+}

@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -8,11 +8,11 @@ import { Segmented } from '@/components/ui/chips';
 import { Field } from '@/components/ui/field';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
-import { celebrateXp } from '@/components/xp-toast';
 import { Space } from '@/constants/theme';
 import { toDay } from '@/lib/dates';
 import { ensureFood, type FoodCandidate } from '@/lib/foods';
 import { macrosFor, MEALS } from '@/lib/nutrition';
+import { refreshStreaks } from '@/lib/streak';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/stores/session';
 import type { Meal } from '@/types/db';
@@ -51,7 +51,7 @@ export default function AddFood() {
         ...m,
       });
       if (error) throw error;
-      celebrateXp();
+      refreshStreaks();
       router.dismissTo('/fuel');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not log this food.');
@@ -60,7 +60,7 @@ export default function AddFood() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: c.bg }}>
+    <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: c.bg }}>
       <ScrollView contentContainerStyle={{ padding: Space.lg, gap: Space.lg }} keyboardShouldPersistTaps="handled">
         <View style={{ gap: 2 }}>
           <AppText variant="h1">{food.name}</AppText>
@@ -70,8 +70,8 @@ export default function AddFood() {
           </AppText>
         </View>
 
-        <Card tone="hero" bg={c.primary} style={{ gap: Space.md }}>
-          <AppText variant="hero" color="#FFFFFF">
+        <Card tone="hero" filled style={{ gap: Space.md }}>
+          <AppText variant="hero" color="onPrimary">
             {Math.round(m.kcal)} kcal
           </AppText>
           <View style={styles.row}>
@@ -120,10 +120,11 @@ export default function AddFood() {
 }
 
 function MacroChip({ label, value, color }: { label: string; value: number; color: string }) {
+  const c = useColors();
   return (
-    <View style={[styles.chip, { backgroundColor: 'rgba(255,255,255,0.16)' }]}>
-      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
-      <AppText variant="smallBold" color="#FFFFFF">
+    <View style={[styles.chip, { backgroundColor: 'rgba(0,0,0,0.08)' }]}>
+      <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: color, borderWidth: 1, borderColor: c.onPrimary }} />
+      <AppText variant="smallBold" color="onPrimary">
         {Math.round(value)}g {label}
       </AppText>
     </View>

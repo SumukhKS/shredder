@@ -1,7 +1,4 @@
-import {
-  BricolageGrotesque_600SemiBold,
-  BricolageGrotesque_800ExtraBold,
-} from '@expo-google-fonts/bricolage-grotesque';
+import { BricolageGrotesque_600SemiBold, BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
 import { PlusJakartaSans_500Medium, PlusJakartaSans_700Bold } from '@expo-google-fonts/plus-jakarta-sans';
 import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
@@ -11,7 +8,7 @@ import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { useColors, useIsDark } from '@/components/ui/theme';
-import { XpToastHost } from '@/components/xp-toast';
+import { UpdateBanner } from '@/components/update-banner';
 import { Fonts } from '@/constants/theme';
 import { useSession } from '@/stores/session';
 
@@ -60,6 +57,9 @@ export default function RootLayout() {
             headerBackTitleStyle: { fontFamily: Fonts.body },
             contentStyle: { backgroundColor: c.bg },
           }}>
+          {/* Opened from the "Email confirmed" page; signs the new account in. */}
+          <Stack.Screen name="auth-callback" options={{ headerShown: false }} />
+
           <Stack.Protected guard={!signedIn} redirectTo="/">
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           </Stack.Protected>
@@ -75,16 +75,29 @@ export default function RootLayout() {
               options={{ presentation: 'fullScreenModal', headerShown: false, gestureEnabled: false }}
             />
             <Stack.Screen name="workout/[id]" options={{ title: 'Workout', headerTransparent: false }} />
-            <Stack.Screen name="workout/exercises" options={{ presentation: 'modal', title: 'Add exercises', headerTransparent: false }} />
+            <Stack.Screen name="workout/day" options={{ title: 'Training', headerTransparent: false }} />
+            <Stack.Screen name="workout/edit" options={{ title: 'Edit workout', headerTransparent: false }} />
+            <Stack.Screen name="habit/[kind]" options={{ title: '', headerTransparent: false }} />
+            <Stack.Screen name="streaks" options={{ title: 'Streaks', headerTransparent: false }} />
+            <Stack.Screen
+              name="workout/exercises"
+              options={{ presentation: 'modal', title: 'Add exercises', headerTransparent: false }}
+            />
+            <Stack.Screen name="exercise/match" options={{ title: 'Match to library', headerTransparent: false }} />
+            <Stack.Screen name="exercise/[id]" options={{ presentation: 'modal', title: 'Exercise', headerTransparent: false }} />
             <Stack.Screen name="routine/edit" options={{ title: 'Routine', headerTransparent: false }} />
             <Stack.Screen name="food/search" options={{ title: 'Log food', headerTransparent: false }} />
             <Stack.Screen name="food/add" options={{ presentation: 'modal', title: 'Add food', headerTransparent: false }} />
             <Stack.Screen name="food/scan" options={{ presentation: 'fullScreenModal', headerShown: false }} />
-            <Stack.Screen name="food/custom" options={{ presentation: 'modal', title: 'Create food', headerTransparent: false }} />
+            <Stack.Screen
+              name="food/custom"
+              options={{ presentation: 'modal', title: 'Create food', headerTransparent: false }}
+            />
             <Stack.Screen name="settings" options={{ title: 'Goals & settings', headerTransparent: false }} />
+            <Stack.Screen name="import" options={{ title: 'Import from Hevy', headerTransparent: false }} />
           </Stack.Protected>
         </Stack>
-        <XpToastHost />
+        <UpdateBanner />
       </ThemeProvider>
     </GestureHandlerRootView>
   );

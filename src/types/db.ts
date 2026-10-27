@@ -36,6 +36,11 @@ export interface Exercise {
   equipment: string;
   kind: ExerciseKind;
   created_by: string | null;
+  /** ExerciseDB id: an animated GIF of the movement */
+  gif_id?: string | null;
+  /** free-exercise-db id: photos of the start and end of the movement (fallback) */
+  media_id?: string | null;
+  instructions?: string[];
 }
 
 export interface Routine {
@@ -65,7 +70,6 @@ export interface WorkoutSummary {
   total_volume: number;
   total_sets: number;
   pr_count: number;
-  xp_earned: number;
 }
 
 export interface Food {
@@ -73,7 +77,7 @@ export interface Food {
   name: string;
   brand: string | null;
   barcode: string | null;
-  source: 'seed' | 'off' | 'custom';
+  source: 'seed' | 'off' | 'custom' | 'usda';
   serving_label: string;
   serving_g: number;
   kcal_100g: number;
@@ -100,6 +104,7 @@ export interface DailyHealth {
   day: string;
   steps: number | null;
   sleep_min: number | null;
+  source?: 'manual' | 'healthkit' | 'health_connect';
 }
 
 export interface BodyMetric {

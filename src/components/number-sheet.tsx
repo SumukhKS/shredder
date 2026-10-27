@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Radius, Space } from '@/constants/theme';
@@ -16,6 +16,10 @@ interface NumberSheetProps {
   suffix?: string;
   initial?: string;
   decimal?: boolean;
+  /** Quick-add chips that add to the number in the field, e.g. +0.25 L. */
+  quick?: { label: string; add: number }[];
+  /** Extra content under the save button (e.g. a sync action). */
+  footer?: React.ReactNode;
   onClose: () => void;
   onSave: (value: number) => Promise<void> | void;
 }
@@ -30,7 +34,7 @@ export function NumberSheet({ visible, onClose, ...rest }: NumberSheetProps) {
   );
 }
 
-function SheetBody({ title, hint, suffix, initial, decimal, onClose, onSave }: Omit<NumberSheetProps, 'visible'>) {
+function SheetBody({ title, hint, suffix, initial, decimal, quick, footer, onClose, onSave }: Omit<NumberSheetProps, 'visible'>) {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const [value, setValue] = useState(initial ?? '');
@@ -51,7 +55,7 @@ function SheetBody({ title, hint, suffix, initial, decimal, onClose, onSave }: O
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+    <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
       <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Close" />
       <View style={[styles.sheet, { backgroundColor: c.surface, borderColor: c.border, paddingBottom: insets.bottom + Space.lg }]}>
         <AppText variant="h2">{title}</AppText>
@@ -65,6 +69,82 @@ function SheetBody({ title, hint, suffix, initial, decimal, onClose, onSave }: O
           error={error}
           onSubmitEditing={save}
         />
+        {quick?.length ? (
+          <View style={styles.quick}>
+            {quick.map((q) => (
+              <Pressable
+                key={q.label}
+                accessibilityRole="button"
+                accessibilityLabel={`Add ${q.label}`}
+                onPress={() => {
+                  const n = Number(value.replace(',', '.')) || 0;
+                  setValue(String(Math.round((n + q.add) * 100) / 100));
+                  setError(null);
+                }}
+                style={({ pressed }) => [styles.chip, { borderColor: c.border, backgroundColor: pressed ? c.primarySoft : c.bg }]}>
+                <AppText variant="smallBold">{q.label}</AppText>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+        <Button label="Save" size="lg" loading={saving} onPress={save} />
+        {footer}
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+interface TextSheetProps {
+  visible: boolean;
+  title: string;
+  initial?: string;
+  placeholder?: string;
+  onClose: () => void;
+  onSave: (value: string) => Promise<void> | void;
+}
+
+/** Bottom sheet with a single text input, for renaming things. */
+export function TextSheet({ visible, onClose, ...rest }: TextSheetProps) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      {visible ? <TextSheetBody onClose={onClose} {...rest} /> : null}
+    </Modal>
+  );
+}
+
+function TextSheetBody({ title, initial, placeholder, onClose, onSave }: Omit<TextSheetProps, 'visible'>) {
+  const c = useColors();
+  const insets = useSafeAreaInsets();
+  const [value, setValue] = useState(initial ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    if (!value.trim()) return setError('Enter a name.');
+    setSaving(true);
+    try {
+      await onSave(value.trim());
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save.');
+      setSaving(false);
+    }
+  }
+
+  return (
+    <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+      <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Close" />
+      <View style={[styles.sheet, { backgroundColor: c.surface, borderColor: c.border, paddingBottom: insets.bottom + Space.lg }]}>
+        <AppText variant="h2">{title}</AppText>
+        <Field
+          autoFocus
+          value={value}
+          onChangeText={setValue}
+          placeholder={placeholder}
+          error={error}
+          selectTextOnFocus
+          onSubmitEditing={save}
+        />
         <Button label="Save" size="lg" loading={saving} onPress={save} />
       </View>
     </KeyboardAvoidingView>
@@ -72,7 +152,7 @@ function SheetBody({ title, hint, suffix, initial, decimal, onClose, onSave }: O
 }
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: 'rgba(20,17,41,0.45)' },
+  scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.72)' },
   sheet: {
     borderTopLeftRadius: Radius.hero,
     borderTopRightRadius: Radius.hero,
@@ -81,4 +161,6 @@ const styles = StyleSheet.create({
     padding: Space.xl,
     gap: Space.lg,
   },
+  quick: { flexDirection: 'row', gap: Space.sm },
+  chip: { flex: 1, height: 40, borderRadius: Radius.row, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
 });

@@ -11,9 +11,12 @@ interface FieldProps extends TextInputProps {
   hint?: string;
   error?: string | null;
   suffix?: string;
+  /** Extra control at the end of the box, e.g. a show-password toggle. */
+  right?: React.ReactNode;
+  ref?: React.ComponentProps<typeof TextInput>['ref'];
 }
 
-export function Field({ label, hint, error, suffix, style, onFocus, onBlur, ...rest }: FieldProps) {
+export function Field({ label, hint, error, suffix, right, style, onFocus, onBlur, ...rest }: FieldProps) {
   const c = useColors();
   const [focused, setFocused] = useState(false);
   return (
@@ -42,6 +45,7 @@ export function Field({ label, hint, error, suffix, style, onFocus, onBlur, ...r
             {suffix}
           </AppText>
         ) : null}
+        {right}
       </View>
       {error ? (
         <AppText variant="small" color="danger">

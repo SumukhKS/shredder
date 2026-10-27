@@ -1,20 +1,20 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { BarChart, LineChart } from '@/components/charts';
 import { NumberSheet } from '@/components/number-sheet';
+import { PrBadge } from '@/components/pr-badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState, Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
-import { celebrateXp } from '@/components/xp-toast';
 import { Space } from '@/constants/theme';
-import { addDays, fromDay, toDay } from '@/lib/dates';
+import { addDays, fromDay, mondayOf, toDay } from '@/lib/dates';
 import { supabase } from '@/lib/supabase';
 import { useQuery } from '@/lib/use-query';
 import { formatVolume } from '@/lib/workouts';
+import { fetchWorkoutWeeks, refreshStreaks, weekStreaks } from '@/lib/streak';
 import { useSession } from '@/stores/session';
 
 interface ProgressData {
@@ -22,17 +22,12 @@ interface ProgressData {
   weeks: { week: string; volume: number; workouts: number }[];
   prs: { best_e1rm: number; best_weight: number; reps: number; achieved_at: string; exercises: { name: string } }[];
   workoutCount: number;
-}
-
-function mondayOf(day: string) {
-  const d = fromDay(day);
-  const offset = (d.getDay() + 6) % 7;
-  return addDays(day, -offset);
+  bestWeekStreak: number;
 }
 
 async function load(): Promise<ProgressData> {
   const since = addDays(toDay(), -7 * 8);
-  const [w, v, p, n] = await Promise.all([
+  const [w, v, p, n, weeks] = await Promise.all([
     supabase.from('body_metrics').select('day, weight_kg').order('day', { ascending: false }).limit(60),
     supabase.from('weekly_volume').select('week, volume, workouts').gte('week', mondayOf(since)).order('week'),
     supabase
@@ -41,12 +36,14 @@ async function load(): Promise<ProgressData> {
       .order('best_e1rm', { ascending: false })
       .limit(8),
     supabase.from('workouts').select('id', { count: 'exact', head: true }),
+    fetchWorkoutWeeks(),
   ]);
   return {
     weights: ((w.data ?? []) as ProgressData['weights']).reverse(),
     weeks: (v.data ?? []) as ProgressData['weeks'],
     prs: (p.data ?? []) as unknown as ProgressData['prs'],
     workoutCount: n.count ?? 0,
+    bestWeekStreak: weekStreaks(weeks).best,
   };
 }
 
@@ -82,7 +79,7 @@ export default function Progress() {
       <View style={styles.stats}>
         <Stat label="Workouts" value={String(d?.workoutCount ?? 0)} />
         <Stat label="Best streak" value={`${profile.longest_streak} d`} />
-        <Stat label="Total XP" value={profile.total_xp.toLocaleString()} />
+        <Stat label="Best weeks" value={`${d?.bestWeekStreak ?? 0} wk`} />
       </View>
 
       <SectionHeader
@@ -97,7 +94,7 @@ export default function Progress() {
               <AppText variant="h3" color="textMuted">kg</AppText>
               <View style={{ flex: 1 }} />
               {weights.length > 1 ? (
-                <AppText variant="bodyBold" color={change <= 0 ? 'success' : 'xp'}>
+                <AppText variant="bodyBold" color={change <= 0 ? 'success' : 'accent'}>
                   {change > 0 ? '+' : ''}
                   {change.toFixed(1)} kg since {fromDay(first.day).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
                 </AppText>
@@ -114,7 +111,7 @@ export default function Progress() {
             )}
           </>
         ) : (
-          <AppText color="textMuted">Weigh in each morning for the clearest trend. Each weigh-in earns 5 XP.</AppText>
+          <AppText color="textMuted">Weigh in each morning for the clearest trend.</AppText>
         )}
       </Card>
 
@@ -123,7 +120,7 @@ export default function Progress() {
         <AppText variant="bodyBold">
           {formatVolume(weekVolumes[weekVolumes.length - 1])} this week
         </AppText>
-        <BarChart values={weekVolumes} labels={weekLabels} color={c.xp} />
+        <BarChart values={weekVolumes} labels={weekLabels} color={c.accent} />
       </Card>
 
       <SectionHeader title="Personal records" />
@@ -133,7 +130,7 @@ export default function Progress() {
         <Card tone="flat" style={{ gap: Space.md }}>
           {d?.prs.map((p) => (
             <View key={p.exercises.name} style={styles.row}>
-              <Ionicons name="trophy" size={18} color={c.carbs} />
+              <PrBadge size={26} />
               <View style={{ flex: 1 }}>
                 <AppText variant="bodyBold">{p.exercises.name}</AppText>
                 <AppText variant="small" color="textMuted">
@@ -163,7 +160,7 @@ export default function Progress() {
             .upsert({ user_id: profile.id, day: toDay(), weight_kg: Math.round(n * 10) / 10 }, { onConflict: 'user_id,day' });
           if (error) throw error;
           await q.reload();
-          await celebrateXp();
+          await refreshStreaks();
         }}
       />
     </Screen>

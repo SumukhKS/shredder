@@ -6,20 +6,27 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "shredder",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "ios": {
       "icon": "./assets/expo.icon",
       "bundleIdentifier": "com.shredder.app"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#5B3DF5",
+        "backgroundColor": "#000000",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.shredder.app"
+      "package": "com.shredder.app",
+      "permissions": [
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_SLEEP"
+      ],
+      "runtimeVersion": {
+        "policy": "fingerprint"
+      }
     },
     "web": {
       "output": "single",
@@ -30,11 +37,11 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#5B3DF5",
+          "backgroundColor": "#000000",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76,
           "dark": {
-            "backgroundColor": "#141129"
+            "backgroundColor": "#000000"
           }
         }
       ],
@@ -51,7 +58,18 @@
         {
           "photosPermission": "Shredder uses your photos to log meals."
         }
-      ]
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ],
+      "react-native-health-connect",
+      "expo-status-bar",
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -62,6 +80,9 @@
         "projectId": "ce5e2fbe-9548-473d-97d1-d2eebb283c04"
       }
     },
-    "owner": "sumukhksd"
+    "owner": "sumukh_ks",
+    "updates": {
+      "url": "https://u.expo.dev/ce5e2fbe-9548-473d-97d1-d2eebb283c04"
+    }
   }
 }

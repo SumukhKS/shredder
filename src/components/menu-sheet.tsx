@@ -60,7 +60,7 @@ export function MenuSheet({
 }
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: 'rgba(20,17,41,0.45)' },
+  scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.72)' },
   sheet: {
     borderTopLeftRadius: Radius.hero,
     borderTopRightRadius: Radius.hero,

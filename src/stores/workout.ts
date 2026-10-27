@@ -5,7 +5,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { toDay } from '@/lib/dates';
 import { supabase } from '@/lib/supabase';
-import { fetchPreviousSets, type PreviousSet } from '@/lib/workouts';
+import { beatsAll, e1rm, fetchBests, fetchPreviousSets, type ExerciseBest, type PreviousSet } from '@/lib/workouts';
 import type { Exercise, ExerciseKind, FinishWorkoutResult, Routine, SetType } from '@/types/db';
 
 export interface ActiveSet {
@@ -16,6 +16,8 @@ export interface ActiveSet {
   duration: string; // seconds
   distance: string; // metres
   done: boolean;
+  /** Ticked as a personal record, so the row keeps its medal. */
+  pr?: boolean;
 }
 
 export interface ActiveExercise {
@@ -25,6 +27,21 @@ export interface ActiveExercise {
   notes: string;
   sets: ActiveSet[];
   previous: PreviousSet[];
+  /** Best before this workout; missing the first time an exercise is done. */
+  best?: ExerciseBest | null;
+}
+
+/** A personal record hit on a ticked set, for the medal animation. */
+export interface PrHit {
+  exerciseName: string;
+  weight: number;
+  reps: number;
+  /** New heaviest working weight. */
+  heaviest: boolean;
+  /** New best estimated one-rep max (set when it beat the old one). */
+  e1rm: number | null;
+  /** No weight on the set (bodyweight moves), so it's described by reps alone. */
+  bodyweight: boolean;
 }
 
 export interface ActiveWorkout {
@@ -44,16 +61,18 @@ interface WorkoutState {
   active: ActiveWorkout | null;
   rest: RestTimer | null;
   start: (routine?: Routine) => Promise<void>;
+  startWith: (name: string, exercises: { exercise: Exercise; sets: number }[]) => Promise<void>;
   rename: (name: string) => void;
   addExercises: (exercises: Exercise[]) => Promise<void>;
   removeExercise: (exKey: string) => void;
-  moveExercise: (exKey: string, dir: -1 | 1) => void;
+  /** Puts the exercises in this order (keys from a drag-and-drop list). */
+  reorderExercises: (keys: string[]) => void;
   setNotes: (exKey: string, notes: string) => void;
   addSet: (exKey: string) => void;
   removeSet: (exKey: string, setKey: string) => void;
   updateSet: (exKey: string, setKey: string, patch: Partial<ActiveSet>) => void;
   cycleSetType: (exKey: string, setKey: string) => void;
-  toggleDone: (exKey: string, setKey: string) => boolean;
+  toggleDone: (exKey: string, setKey: string) => { done: boolean; pr: PrHit | null };
   setRestSeconds: (exKey: string, seconds: number) => void;
   adjustRest: (deltaSeconds: number) => void;
   skipRest: () => void;
@@ -64,21 +83,80 @@ interface WorkoutState {
 let counter = 0;
 const uid = () => `${Date.now().toString(36)}-${(counter++).toString(36)}`;
 
-function emptySet(kind: ExerciseKind, prev?: PreviousSet, last?: ActiveSet): ActiveSet {
+export type SetField = 'weight' | 'reps' | 'duration' | 'distance';
+const FIELDS: SetField[] = ['weight', 'reps', 'duration', 'distance'];
+
+// Sets start blank; the grey placeholder shows what ticking the set will log.
+function emptySet(): ActiveSet {
+  return { key: uid(), setType: 'normal', weight: '', reps: '', duration: '', distance: '', done: false };
+}
+
+function fromPrevious(kind: ExerciseKind, prev: PreviousSet | undefined, field: SetField): string {
+  if (!prev) return '';
   const cardio = kind === 'distance_time';
-  const fmt = (v: number | null | undefined, div = 1) => (v != null ? String(Math.round((Number(v) / div) * 100) / 100) : '');
+  const v = { weight: prev.weight_kg, reps: prev.reps, duration: prev.duration_s, distance: prev.distance_m }[field];
+  const div = field === 'duration' && cardio ? 60 : field === 'distance' && cardio ? 1000 : 1;
+  return v != null ? String(Math.round((Number(v) / div) * 100) / 100) : '';
+}
+
+/**
+ * The value a blank field stands for: whatever the set above logged (or would log),
+ * and for the first set, the first set from last time.
+ */
+export function placeholderFor(ex: ActiveExercise, index: number, field: SetField): string {
+  for (let i = index - 1; i >= 0; i--) {
+    const v = ex.sets[i][field];
+    if (v !== '') return v;
+  }
+  return fromPrevious(ex.exercise.kind, ex.previous[0], field);
+}
+
+function filled(ex: ActiveExercise, index: number): ActiveSet {
+  const s = { ...ex.sets[index] };
+  for (const f of FIELDS) if (s[f] === '') s[f] = placeholderFor(ex, index, f);
+  return s;
+}
+
+const num = (v: string) => Number(v.replace(',', '.')) || 0;
+
+/** Did this set beat everything before it, including earlier sets today? */
+// The first workout with an exercise is a baseline: with no past history there is nothing to beat.
+function detectPr(ex: ActiveExercise, index: number, set: ActiveSet): PrHit | null {
+  const kind = ex.exercise.kind;
+  const history = ex.best?.history ?? [];
+  if ((kind !== 'weight_reps' && kind !== 'bodyweight_reps') || set.setType === 'warmup' || !ex.best || !history.length) {
+    return null;
+  }
+  const weight = num(set.weight);
+  const reps = num(set.reps);
+  const earlier = [...history];
+  let bestWeight = ex.best.weight;
+  let bestE1rm = ex.best.e1rm;
+  ex.sets.forEach((x, i) => {
+    if (i === index || !x.done || x.setType === 'warmup') return;
+    earlier.push({ weight: num(x.weight), reps: num(x.reps) });
+    bestWeight = Math.max(bestWeight, num(x.weight));
+    bestE1rm = Math.max(bestE1rm, e1rm(num(x.weight), num(x.reps)) ?? 0);
+  });
+  if (!beatsAll(weight, reps, earlier)) return null;
+  const est = e1rm(weight, reps);
   return {
-    key: uid(),
-    setType: 'normal',
-    weight: last?.weight ?? fmt(prev?.weight_kg),
-    reps: last?.reps ?? fmt(prev?.reps),
-    duration: last?.duration ?? fmt(prev?.duration_s, cardio ? 60 : 1),
-    distance: last?.distance ?? fmt(prev?.distance_m, cardio ? 1000 : 1),
-    done: false,
+    exerciseName: ex.exercise.name,
+    weight,
+    reps,
+    heaviest: weight > bestWeight,
+    e1rm: est != null && est > bestE1rm ? est : null,
+    bodyweight: weight === 0,
   };
 }
 
-function buildExercise(exercise: Exercise, previous: PreviousSet[], setCount: number, restSeconds = 90): ActiveExercise {
+function buildExercise(
+  exercise: Exercise,
+  previous: PreviousSet[],
+  best: ExerciseBest | undefined,
+  setCount: number,
+  restSeconds = 90
+): ActiveExercise {
   const count = Math.max(1, setCount || previous.length || 3);
   return {
     key: uid(),
@@ -86,8 +164,17 @@ function buildExercise(exercise: Exercise, previous: PreviousSet[], setCount: nu
     restSeconds,
     notes: '',
     previous,
-    sets: Array.from({ length: count }, (_, i) => emptySet(exercise.kind, previous[i] ?? previous[previous.length - 1])),
+    best: best ?? null,
+    sets: Array.from({ length: count }, emptySet),
   };
+}
+
+async function history(ids: string[]) {
+  const [prev, bests] = await Promise.all([
+    fetchPreviousSets(ids).catch(() => ({}) as Record<string, PreviousSet[]>),
+    fetchBests(ids).catch(() => ({}) as Record<string, ExerciseBest>),
+  ]);
+  return { prev, bests };
 }
 
 const SET_CYCLE: SetType[] = ['normal', 'warmup', 'drop', 'failure'];
@@ -124,15 +211,14 @@ export const useWorkout = create<WorkoutState>()(
           const name = routine?.name ?? `${now.toLocaleDateString(undefined, { weekday: 'long' })} workout`;
           set({ active: { name, routineId: routine?.id ?? null, startedAt: now.toISOString(), exercises: [] }, rest: null });
           if (routine?.routine_exercises.length) {
-            const ids = routine.routine_exercises.map((r) => r.exercise_id);
-            const prev = await fetchPreviousSets(ids).catch(() => ({}) as Record<string, PreviousSet[]>);
+            const { prev, bests } = await history(routine.routine_exercises.map((r) => r.exercise_id));
             set((s) =>
               s.active
                 ? {
                     active: {
                       ...s.active,
                       exercises: routine.routine_exercises.map((r) =>
-                        buildExercise(r.exercises, prev[r.exercise_id] ?? [], r.target_sets, r.rest_seconds)
+                        buildExercise(r.exercises, prev[r.exercise_id] ?? [], bests[r.exercise_id], r.target_sets, r.rest_seconds)
                       ),
                     },
                   }
@@ -141,18 +227,33 @@ export const useWorkout = create<WorkoutState>()(
           }
         },
 
-        rename: (name) => set((s) => (s.active ? { active: { ...s.active, name } } : s)),
-
-        addExercises: async (exercises) => {
-          const prev = await fetchPreviousSets(exercises.map((e) => e.id)).catch(
-            () => ({}) as Record<string, PreviousSet[]>
-          );
+        startWith: async (name, exercises) => {
+          set({ active: { name, routineId: null, startedAt: new Date().toISOString(), exercises: [] }, rest: null });
+          const { prev, bests } = await history(exercises.map((e) => e.exercise.id));
           set((s) =>
             s.active
               ? {
                   active: {
                     ...s.active,
-                    exercises: [...s.active.exercises, ...exercises.map((e) => buildExercise(e, prev[e.id] ?? [], 0))],
+                    exercises: exercises.map((e) =>
+                      buildExercise(e.exercise, prev[e.exercise.id] ?? [], bests[e.exercise.id], e.sets)
+                    ),
+                  },
+                }
+              : s
+          );
+        },
+
+        rename: (name) => set((s) => (s.active ? { active: { ...s.active, name } } : s)),
+
+        addExercises: async (exercises) => {
+          const { prev, bests } = await history(exercises.map((e) => e.id));
+          set((s) =>
+            s.active
+              ? {
+                  active: {
+                    ...s.active,
+                    exercises: [...s.active.exercises, ...exercises.map((e) => buildExercise(e, prev[e.id] ?? [], bests[e.id], 0))],
                   },
                 }
               : s
@@ -162,15 +263,12 @@ export const useWorkout = create<WorkoutState>()(
         removeExercise: (exKey) =>
           set((s) => (s.active ? { active: { ...s.active, exercises: s.active.exercises.filter((e) => e.key !== exKey) } } : s)),
 
-        moveExercise: (exKey, dir) =>
+        reorderExercises: (keys) =>
           set((s) => {
             if (!s.active) return s;
-            const list = [...s.active.exercises];
-            const i = list.findIndex((e) => e.key === exKey);
-            const j = i + dir;
-            if (i < 0 || j < 0 || j >= list.length) return s;
-            [list[i], list[j]] = [list[j], list[i]];
-            return { active: { ...s.active, exercises: list } };
+            const list = s.active.exercises;
+            const sorted = keys.map((k) => list.find((e) => e.key === k)).filter((e): e is ActiveExercise => !!e);
+            return { active: { ...s.active, exercises: [...sorted, ...list.filter((e) => !keys.includes(e.key))] } };
           }),
 
         setNotes: (exKey, notes) => mapExercise(exKey, (e) => ({ ...e, notes })),
@@ -178,7 +276,7 @@ export const useWorkout = create<WorkoutState>()(
         addSet: (exKey) =>
           mapExercise(exKey, (e) => ({
             ...e,
-            sets: [...e.sets, emptySet(e.exercise.kind, e.previous[e.sets.length], e.sets[e.sets.length - 1])],
+            sets: [...e.sets, emptySet()],
           })),
 
         removeSet: (exKey, setKey) => mapExercise(exKey, (e) => ({ ...e, sets: e.sets.filter((x) => x.key !== setKey) })),
@@ -194,18 +292,28 @@ export const useWorkout = create<WorkoutState>()(
             ),
           })),
 
-        /** Returns true when the set was marked done (so the UI can celebrate). */
+        /**
+         * Ticking a set fills its blank fields from the placeholders. Returns whether it is now
+         * done, and the PR it set, if any (so the UI can celebrate).
+         */
         toggleDone: (exKey, setKey) => {
           const ex = get().active?.exercises.find((e) => e.key === exKey);
-          const target = ex?.sets.find((x) => x.key === setKey);
-          if (!ex || !target) return false;
-          const nowDone = !target.done;
-          if (nowDone && !setIsValid(ex, target)) return false;
-          mapExercise(exKey, (e) => ({ ...e, sets: e.sets.map((x) => (x.key === setKey ? { ...x, done: nowDone } : x)) }));
-          if (nowDone && ex.restSeconds > 0 && target.setType !== 'warmup') {
+          const index = ex ? ex.sets.findIndex((x) => x.key === setKey) : -1;
+          if (!ex || index < 0) return { done: false, pr: null };
+          const target = ex.sets[index];
+          if (target.done) {
+            mapExercise(exKey, (e) => ({ ...e, sets: e.sets.map((x) => (x.key === setKey ? { ...x, done: false, pr: false } : x)) }));
+            return { done: false, pr: null };
+          }
+          const next = { ...filled(ex, index), done: true };
+          if (!setIsValid(ex, next)) return { done: false, pr: null };
+          const pr = detectPr(ex, index, next);
+          next.pr = !!pr;
+          mapExercise(exKey, (e) => ({ ...e, sets: e.sets.map((x) => (x.key === setKey ? next : x)) }));
+          if (ex.restSeconds > 0 && target.setType !== 'warmup') {
             set({ rest: { endsAt: Date.now() + ex.restSeconds * 1000, duration: ex.restSeconds, exerciseName: ex.exercise.name } });
           }
-          return nowDone;
+          return { done: true, pr };
         },
 
         setRestSeconds: (exKey, seconds) => mapExercise(exKey, (e) => ({ ...e, restSeconds: seconds })),

@@ -3,81 +3,73 @@ import { Platform } from 'react-native';
 /**
  * Shredder design tokens.
  *
- * Direction: arcade scoreboard meets gym chalk. A lilac-white "chalk" ground,
- * deep violet ink, and chunky ink-outlined surfaces with a hard offset shadow.
- * Volt (electric violet) is the action colour; Ember is reserved for XP and
- * streaks so progress always reads as heat. Macros keep fixed colours everywhere.
+ * Direction: blaze on black. A pitch-black ground with warm charcoal surfaces and
+ * one hot orange-red that carries actions, progress and streaks, polished into a
+ * gradient (amber to vermilion) with a soft glow on the things that matter. Amber
+ * and bone are its supporting tones for macros and sleep stages; red is for
+ * destructive actions.
  */
 const palette = {
-  chalk: '#F4F2FF',
-  paper: '#FFFFFF',
-  ink: '#1D1840',
-  inkSoft: '#5E5880',
-  line: '#DCD7F2',
-  volt: '#5B3DF5',
-  voltSoft: '#E7E1FF',
-  ember: '#FF5A36',
-  emberSoft: '#FFE3DB',
-  mint: '#14B892',
-  sun: '#FFB800',
-  sky: '#2E9BFF',
-  danger: '#E5304C',
-
-  night: '#141129',
-  nightRaised: '#201C3D',
-  nightLine: '#37315E',
-  moon: '#F1EEFF',
-  moonSoft: '#A49DC8',
+  black: '#000000',
+  char: '#15100D',
+  charHi: '#221813',
+  line: '#35271F',
+  hairline: '#211814',
+  white: '#FFFFFF',
+  bone: '#F3E3D6',
+  ash: '#A99E97',
+  smoke: '#6E625B',
+  ember: '#5A2814',
+  blaze: '#FF5A1F',
+  flame: '#FF8A3D',
+  amber: '#FFB547',
+  danger: '#FF3B30',
 };
 
-export const Colors = {
-  light: {
-    bg: palette.chalk,
-    surface: palette.paper,
-    text: palette.ink,
-    textMuted: palette.inkSoft,
-    border: palette.ink,
-    hairline: palette.line,
-    shadow: palette.ink,
-    primary: palette.volt,
-    primarySoft: palette.voltSoft,
-    onPrimary: '#FFFFFF',
-    xp: palette.ember,
-    xpSoft: palette.emberSoft,
-    success: palette.mint,
-    danger: palette.danger,
-    protein: palette.mint,
-    carbs: palette.sun,
-    fat: palette.sky,
-    water: palette.sky,
-    steps: palette.volt,
-    sleep: '#8B6CFF',
-  },
-  dark: {
-    bg: palette.night,
-    surface: palette.nightRaised,
-    text: palette.moon,
-    textMuted: palette.moonSoft,
-    border: palette.nightLine,
-    hairline: palette.nightLine,
-    shadow: '#000000',
-    primary: '#7C64FF',
-    primarySoft: '#2E2760',
-    onPrimary: '#FFFFFF',
-    xp: '#FF6B4A',
-    xpSoft: '#3D2230',
-    success: palette.mint,
-    danger: '#FF5470',
-    protein: palette.mint,
-    carbs: palette.sun,
-    fat: palette.sky,
-    water: palette.sky,
-    steps: '#7C64FF',
-    sleep: '#A28BFF',
-  },
-} as const;
+const dark = {
+  bg: palette.black,
+  surface: palette.char,
+  surfaceHi: palette.charHi,
+  text: palette.white,
+  textMuted: palette.ash,
+  border: palette.line,
+  hairline: palette.hairline,
+  shadow: palette.ember,
+  primary: palette.blaze,
+  primarySoft: palette.hairline,
+  onPrimary: palette.black,
+  accent: palette.flame,
+  accentSoft: palette.hairline,
+  onAccent: palette.black,
+  success: palette.blaze,
+  danger: palette.danger,
+  ember: palette.flame,
+  glow: 'rgba(255,90,31,0.32)',
+  protein: palette.blaze,
+  carbs: palette.amber,
+  fat: palette.bone,
+  water: palette.flame,
+  steps: palette.blaze,
+  sleep: palette.amber,
+  // Sleep stages, deepest the hottest.
+  deep: '#E0301E',
+  light: palette.flame,
+  rem: palette.amber,
+  awake: palette.bone,
+};
 
-export type ThemeColors = { [K in keyof typeof Colors.light]: string };
+// The app is dark only; `light` is kept so existing imports keep working.
+export const Colors = { light: dark, dark } as const;
+
+export type ThemeColors = { [K in keyof typeof dark]: string };
+
+/** Gradient stops for expo-linear-gradient. */
+export const Gradients = {
+  blaze: ['#FFA043', '#FF5A1F', '#E6301A'],
+  char: ['#2A1A12', '#0E0907'],
+  sheen: ['rgba(255,120,60,0.09)', 'rgba(255,120,60,0)'],
+  ember: ['#FFD166', '#FF8A3D', '#FF5A1F'],
+} as const satisfies Record<string, readonly [string, string, ...string[]]>;
 
 export const Fonts = {
   display: 'BricolageGrotesque_800ExtraBold',
@@ -107,9 +99,20 @@ export const Type = {
 
 export type TypeVariant = keyof typeof Type;
 
-/** Hard offset shadow used on ink-outlined surfaces (boxShadow works on all platforms with the New Architecture) */
+/** Hard offset shadow used on chunky buttons (boxShadow works on all platforms with the New Architecture) */
 export function hardShadow(color: string, offset = 4) {
   return { boxShadow: `${offset}px ${offset}px 0px ${color}` } as const;
+}
+
+/** Soft halo that lifts a surface off the black ground. */
+export function glow(color: string, radius = 24) {
+  return { boxShadow: `0px 0px ${radius}px 0px ${color}` } as const;
+}
+
+/** `#RRGGBB` with an alpha (0-1); other colour strings are returned unchanged. */
+export function withAlpha(hex: string, a: number) {
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  return hex + Math.round(a * 255).toString(16).padStart(2, '0');
 }
 
 export const isWeb = Platform.OS === 'web';

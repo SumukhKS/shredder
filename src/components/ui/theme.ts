@@ -1,11 +1,10 @@
-import { useColorScheme } from 'react-native';
-
 import { Colors, type ThemeColors } from '@/constants/theme';
 
+/** Shredder is always dark: pitch black with white and silver. */
 export function useColors(): ThemeColors {
-  return useColorScheme() === 'dark' ? Colors.dark : Colors.light;
+  return Colors.dark;
 }
 
 export function useIsDark() {
-  return useColorScheme() === 'dark';
+  return true;
 }

@@ -1,8 +1,10 @@
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Platform, StyleSheet, TextInput, View } from 'react-native';
+import Animated, { useAnimatedRef } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Sortable } from '@/components/sortable';
 import { Button, IconButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
@@ -25,6 +27,7 @@ interface Row {
 
 let n = 0;
 const key = () => `r${n++}`;
+const rowKey = (r: Row) => r.key;
 
 export default function RoutineEditor() {
   const c = useColors();
@@ -36,6 +39,7 @@ export default function RoutineEditor() {
   const [rows, setRows] = useState<Row[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
 
   useEffect(() => {
     if (!id) return;
@@ -69,14 +73,8 @@ export default function RoutineEditor() {
   );
 
   const update = (k: string, patch: Partial<Row>) => setRows((r) => r.map((x) => (x.key === k ? { ...x, ...patch } : x)));
-  const move = (i: number, d: -1 | 1) =>
-    setRows((r) => {
-      const j = i + d;
-      if (j < 0 || j >= r.length) return r;
-      const copy = [...r];
-      [copy[i], copy[j]] = [copy[j], copy[i]];
-      return copy;
-    });
+  const reorder = (keys: string[]) =>
+    setRows((r) => keys.map((k) => r.find((x) => x.key === k)).filter((x): x is Row => !!x));
 
   async function save() {
     if (!name.trim()) return setError('Give the routine a name.');
@@ -119,6 +117,7 @@ export default function RoutineEditor() {
   return (
     <Screen
       padTop={false}
+      scrollRef={scrollRef}
       footer={
         <View style={[styles.footer, { backgroundColor: c.bg, borderColor: c.hairline, paddingBottom: insets.bottom + Space.lg }]}>
           <Button label="Save routine" size="lg" loading={saving} onPress={save} />
@@ -131,44 +130,51 @@ export default function RoutineEditor() {
         <EmptyState title="Add your exercises" body="Pick the moves for this day. You can set target sets, reps and rest for each." />
       ) : null}
 
-      {rows.map((r, i) => (
-        <Card key={r.key} style={{ gap: Space.md }}>
-          <View style={styles.row}>
-            <View style={{ flex: 1 }}>
-              <AppText variant="h3">{r.exercise.name}</AppText>
-              <AppText variant="small" color="textMuted">
-                {MUSCLE_LABELS[r.exercise.primary_muscle] ?? r.exercise.primary_muscle}
-              </AppText>
-            </View>
-            <IconButton icon="arrow-up" label="Move up" onPress={() => move(i, -1)} />
-            <IconButton icon="arrow-down" label="Move down" onPress={() => move(i, 1)} />
-            <IconButton
-              icon="trash-outline"
-              label="Remove"
-              color={c.danger}
-              onPress={() => setRows((x) => x.filter((y) => y.key !== r.key))}
-            />
-          </View>
-          <View style={styles.row}>
-            <Stepper label="Sets" value={r.sets} onChange={(v) => update(r.key, { sets: Math.min(10, Math.max(1, v)) })} />
-            <View style={{ flex: 1, gap: 4 }}>
-              <AppText variant="small" color="textMuted">Reps</AppText>
-              <TextInput
-                value={r.reps}
-                onChangeText={(t) => update(r.key, { reps: t })}
-                style={[styles.reps, { color: c.text, borderColor: c.hairline, backgroundColor: c.bg }]}
+      <Sortable
+        items={rows}
+        keyOf={rowKey}
+        mode="handle"
+        gap={Space.lg}
+        scrollRef={scrollRef}
+        onReorder={reorder}
+        renderItem={(r, { handle }) => (
+          <Card style={{ gap: Space.md }}>
+            <View style={styles.row}>
+              {handle}
+              <View style={{ flex: 1 }}>
+                <AppText variant="h3">{r.exercise.name}</AppText>
+                <AppText variant="small" color="textMuted">
+                  {MUSCLE_LABELS[r.exercise.primary_muscle] ?? r.exercise.primary_muscle}
+                </AppText>
+              </View>
+              <IconButton
+                icon="trash-outline"
+                label="Remove"
+                color={c.danger}
+                onPress={() => setRows((x) => x.filter((y) => y.key !== r.key))}
               />
             </View>
-            <Stepper
-              label="Rest"
-              value={r.rest}
-              display={r.rest ? `${r.rest}s` : 'Off'}
-              onChange={(v) => update(r.key, { rest: Math.min(300, Math.max(0, v)) })}
-              step={15}
-            />
-          </View>
-        </Card>
-      ))}
+            <View style={styles.row}>
+              <Stepper label="Sets" value={r.sets} onChange={(v) => update(r.key, { sets: Math.min(10, Math.max(1, v)) })} />
+              <View style={{ flex: 1, gap: 4 }}>
+                <AppText variant="small" color="textMuted">Reps</AppText>
+                <TextInput
+                  value={r.reps}
+                  onChangeText={(t) => update(r.key, { reps: t })}
+                  style={[styles.reps, { color: c.text, borderColor: c.hairline, backgroundColor: c.bg }]}
+                />
+              </View>
+              <Stepper
+                label="Rest"
+                value={r.rest}
+                display={r.rest ? `${r.rest}s` : 'Off'}
+                onChange={(v) => update(r.key, { rest: Math.min(300, Math.max(0, v)) })}
+                step={15}
+              />
+            </View>
+          </Card>
+        )}
+      />
 
       <Button
         label="Add exercises"

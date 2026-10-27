@@ -35,6 +35,36 @@ export function computeTargets({ sex, age, heightCm, weightKg, activity, goal }:
   return { calories, protein, carbs, fat, water, bmr: Math.round(bmr), tdee: Math.round(tdee) };
 }
 
+export interface Macros {
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+const macroKcal = (m: Macros) => m.protein * 4 + m.carbs * 4 + m.fat * 9;
+
+/** Share of calories from each macro, in whole percent (null when there are no macros). */
+export function macroSplit(m: Macros): Macros | null {
+  const total = macroKcal(m);
+  if (total <= 0) return null;
+  const protein = Math.round(((m.protein * 4) / total) * 100);
+  const fat = Math.round(((m.fat * 9) / total) * 100);
+  return { protein, fat, carbs: 100 - protein - fat };
+}
+
+export const DEFAULT_SPLIT: Macros = { protein: 30, carbs: 45, fat: 25 };
+
+/**
+ * Grams for a calorie target at a given percentage split, with carbs taking up the
+ * rounding so the grams add back up to the target.
+ */
+export function scaleMacros(split: Macros, calories: number): Macros {
+  const protein = Math.round((calories * split.protein) / 100 / 4);
+  const fat = Math.round((calories * split.fat) / 100 / 9);
+  const carbs = Math.max(0, Math.round((calories - protein * 4 - fat * 9) / 4));
+  return { protein, carbs, fat };
+}
+
 export function macrosFor(food: Pick<Food, 'kcal_100g' | 'protein_100g' | 'carbs_100g' | 'fat_100g'>, grams: number) {
   const f = grams / 100;
   const r = (n: number) => Math.round(n * 10) / 10;

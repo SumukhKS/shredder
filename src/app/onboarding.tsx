@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, IconButton } from '@/components/ui/button';
@@ -83,7 +83,7 @@ export default function Onboarding() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: c.bg }}>
+    <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: c.bg }}>
       <View style={[styles.top, { paddingTop: insets.top + Space.md }]}>
         <View style={{ width: 32 }}>
           {step > 0 ? <IconButton icon="chevron-back" label="Back" onPress={() => setStep(step - 1)} /> : null}
@@ -139,14 +139,14 @@ export default function Onboarding() {
         {current === 'review' && targets ? (
           <>
             <AppText variant="h1">Your daily targets</AppText>
-            <Card tone="hero" bg={c.primary}>
-              <AppText variant="smallBold" color="#FFFFFF">
+            <Card tone="hero" filled>
+              <AppText variant="smallBold" color="onPrimary">
                 Calories
               </AppText>
-              <AppText variant="hero" color="#FFFFFF">
+              <AppText variant="hero" color="onPrimary">
                 {targets.calories.toLocaleString()}
               </AppText>
-              <AppText variant="small" color="#FFFFFF" style={{ opacity: 0.85 }}>
+              <AppText variant="small" color="onPrimary" style={{ opacity: 0.85 }}>
                 Maintenance is about {targets.tdee.toLocaleString()} kcal
               </AppText>
             </Card>
