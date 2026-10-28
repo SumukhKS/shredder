@@ -2,7 +2,7 @@ import Constants from 'expo-constants';
 import { router, useFocusEffect } from 'expo-router';
 import * as Updates from 'expo-updates';
 import { useCallback, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Switch, View } from 'react-native';
 
 import { checkForAppUpdate } from '@/components/update-banner';
 import { Button } from '@/components/ui/button';
@@ -10,14 +10,18 @@ import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
+import { useColors } from '@/components/ui/theme';
 import { Space } from '@/constants/theme';
 import { toDay } from '@/lib/dates';
 import { backfillHealth, connectHealth, healthStatus, openHealthSettings, type HealthStatus } from '@/lib/health';
 import { computeTargets, DEFAULT_SPLIT, macroSplit, scaleMacros } from '@/lib/nutrition';
+import { useAppSettings } from '@/stores/app-settings';
 import { useSession } from '@/stores/session';
 
 export default function Settings() {
+  const c = useColors();
   const { profile, updateProfile, signOut, session } = useSession();
+  const { autoUpdate, setAutoUpdate } = useAppSettings();
   const [form, setForm] = useState(() => ({
     display_name: profile?.display_name ?? '',
     calorie_target: String(profile?.calorie_target ?? ''),
@@ -89,13 +93,13 @@ export default function Settings() {
     setUpdateNote(null);
     try {
       const r = await checkForAppUpdate();
-      setUpdateNote(
-        r === 'downloaded'
-          ? 'A new version has downloaded. Tap Update ready to restart.'
-          : r === 'none'
-            ? 'You have the latest version.'
-            : 'Updates are off in development builds.'
-      );
+      if (r === 'available') {
+        setUpdateNote('Downloading the new version...');
+        await Updates.fetchUpdateAsync();
+        setUpdateNote('Downloaded. Tap Update ready to restart into it.');
+      } else {
+        setUpdateNote(r === 'none' ? 'You have the latest version.' : 'Updates are off in development builds.');
+      }
     } catch {
       setUpdateNote('Could not reach the update server. Check your connection.');
     } finally {
@@ -252,9 +256,25 @@ export default function Settings() {
         <AppText variant="small" color="textMuted">
           Version {Constants.expoConfig?.version ?? '1.0.0'}
           {Updates.updateId ? `, update ${Updates.updateId.slice(0, 8)}` : ', as installed'}
-          {Updates.createdAt ? ` from ${Updates.createdAt.toLocaleDateString()}` : ''}. New versions download by themselves when
-          you open the app.
+          {Updates.createdAt ? ` from ${Updates.createdAt.toLocaleDateString()}` : ''}.
         </AppText>
+        <View style={styles.toggle}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <AppText variant="bodyBold">Auto-update</AppText>
+            <AppText variant="small" color="textMuted">
+              {autoUpdate
+                ? 'New versions download by themselves; you choose when to restart into them.'
+                : 'You are asked before anything is downloaded.'}
+            </AppText>
+          </View>
+          <Switch
+            accessibilityLabel="Auto-update"
+            value={autoUpdate}
+            onValueChange={setAutoUpdate}
+            trackColor={{ false: c.border, true: c.primary }}
+            thumbColor={c.text}
+          />
+        </View>
         <Button
           label="Check for updates"
           icon="cloud-download-outline"
@@ -288,4 +308,7 @@ const HEALTH_LABELS: Record<HealthStatus | 'checking', string> = {
   checking: 'Checking...',
 };
 
-const styles = StyleSheet.create({ row: { flexDirection: 'row', gap: Space.md } });
+const styles = StyleSheet.create({
+  row: { flexDirection: 'row', gap: Space.md },
+  toggle: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
+});

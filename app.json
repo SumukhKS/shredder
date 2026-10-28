@@ -82,7 +82,8 @@
     },
     "owner": "sumukh_ks",
     "updates": {
-      "url": "https://u.expo.dev/ce5e2fbe-9548-473d-97d1-d2eebb283c04"
+      "url": "https://u.expo.dev/ce5e2fbe-9548-473d-97d1-d2eebb283c04",
+      "checkAutomatically": "NEVER"
     }
   }
 }
