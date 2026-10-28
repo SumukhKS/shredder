@@ -370,6 +370,9 @@ function ExerciseEditor({
                 onChangeText={(v) => onSet(s.key, { [col.field]: v })}
                 keyboardType={col.field === 'reps' ? 'number-pad' : 'decimal-pad'}
                 selectTextOnFocus
+                multiline={false}
+                numberOfLines={1}
+                scrollEnabled={false}
                 accessibilityLabel={col.label}
                 placeholder="0"
                 placeholderTextColor={c.textMuted}
@@ -404,6 +407,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: Fonts.bodyBold,
     fontSize: 15,
+    // Android pads text inputs and their font by default, which made the text taller than the box
+    // (so it scrolled inside it); the box sets the height and the text sits in its middle.
+    paddingVertical: 0,
+    paddingHorizontal: 4,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   addSet: {
     flexDirection: 'row',

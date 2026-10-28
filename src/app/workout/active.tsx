@@ -500,6 +500,9 @@ function SetRow({
       onChangeText={(t) => onChange({ [field]: t.replace(/[^0-9.,]/g, '') })}
       keyboardType={field === 'reps' ? 'number-pad' : 'decimal-pad'}
       selectTextOnFocus
+      multiline={false}
+      numberOfLines={1}
+      scrollEnabled={false}
       accessibilityLabel={field}
       placeholder={placeholder(field) || '0'}
       placeholderTextColor={c.textMuted}
@@ -652,6 +655,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: Fonts.bodyBold,
     fontSize: 16,
+    // Android pads text inputs and their font by default, which made the text taller than the box
+    // (so it scrolled inside it); the box sets the height and the text sits in its middle.
+    paddingVertical: 0,
+    paddingHorizontal: 4,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   check: { height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   swipeDelete: { width: 64, marginLeft: Space.sm, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },

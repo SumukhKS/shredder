@@ -217,7 +217,19 @@ function Stepper({
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
-  reps: { minWidth: 0, height: 40, borderWidth: 1.5, borderRadius: 10, textAlign: 'center', fontFamily: Fonts.bodyBold, fontSize: 15 },
+  reps: {
+    minWidth: 0,
+    height: 40,
+    borderWidth: 1.5,
+    borderRadius: 10,
+    textAlign: 'center',
+    fontFamily: Fonts.bodyBold,
+    fontSize: 15,
+    // No Android default padding, so the text fits the box instead of scrolling inside it.
+    paddingVertical: 0,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  },
   stepper: { flexDirection: 'row', alignItems: 'center', height: 40, borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 2 },
   footer: { paddingHorizontal: Space.lg, paddingTop: Space.lg, borderTopWidth: 1 },
 });
