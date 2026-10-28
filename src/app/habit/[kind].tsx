@@ -93,7 +93,7 @@ export default function HabitScreen() {
     const s = await connectHealth();
     setHealth(s);
     if (s === 'connected') {
-      await backfillHealth(session!.user.id, toDay());
+      await backfillHealth(session!.user.id, toDay(), true);
       reload();
       setNote('Connected. Steps and sleep now sync each time you open the app.');
     } else if (s === 'not_installed' || s === 'needs_update') {

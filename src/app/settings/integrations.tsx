@@ -29,7 +29,7 @@ export default function IntegrationSettings() {
     const status = await connectHealth();
     setHealth(status);
     if (status === 'connected' && session) {
-      await backfillHealth(session.user.id, toDay());
+      await backfillHealth(session.user.id, toDay(), true);
       setNote('Connected. Steps and sleep sync each time you open Today.');
     } else if (status === 'disconnected') {
       setNote('Allow steps and sleep in Health Connect to sync them.');

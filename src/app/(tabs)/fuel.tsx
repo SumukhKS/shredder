@@ -25,7 +25,7 @@ export default function Fuel() {
   const router = useRouter();
   const profile = useSession((s) => s.profile);
   const [day, setDay] = useState(toDay());
-  const q = useQuery(() => fetchDay(day), day);
+  const q = useQuery(() => fetchDay(day), day, { cache: 'fuel' });
   const [selected, setSelected] = useState<FoodLog | null>(null);
 
   if (!profile) return null;

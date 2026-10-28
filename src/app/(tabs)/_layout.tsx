@@ -73,13 +73,15 @@ function ActiveWorkoutBanner() {
   const c = useColors();
   const router = useRouter();
   const active = useWorkout((s) => s.active);
+  const running = !!active;
   const [now, setNow] = useState(() => Date.now());
 
+  // One timer for the whole workout, not restarted on every set change.
   useEffect(() => {
-    if (!active) return;
+    if (!running) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [active]);
+  }, [running]);
 
   if (!active) return null;
   const elapsed = (now - new Date(active.startedAt).getTime()) / 1000;

@@ -177,6 +177,17 @@ function buildExercise(
   };
 }
 
+/**
+ * Previous sets and bests arrive after the exercises are already on screen. An exercise with no
+ * set count of its own takes as many sets as last time, unless something was typed already.
+ */
+function withHistory(ex: ActiveExercise, previous: PreviousSet[], best: ExerciseBest | undefined, fixedCount: boolean) {
+  const untouched = ex.sets.every((x) => !x.done && FIELDS.every((f) => x[f] === ''));
+  const count = Math.max(1, previous.length || 3);
+  const sets = !fixedCount && untouched && count !== ex.sets.length ? Array.from({ length: count }, emptySet) : ex.sets;
+  return { ...ex, previous, best: best ?? null, sets };
+}
+
 async function history(ids: string[]) {
   const [prev, bests] = await Promise.all([
     fetchPreviousSets(ids).catch(() => ({}) as Record<string, PreviousSet[]>),
@@ -205,10 +216,28 @@ export const useWorkout = create<WorkoutState>()(
     (set, get) => {
       const mapExercise = (exKey: string, fn: (ex: ActiveExercise) => ActiveExercise) =>
         set((s) =>
+          s.active ? { active: { ...s.active, exercises: s.active.exercises.map((e) => (e.key === exKey ? fn(e) : e)) } } : s
+        );
+
+      /** Add previous sets and bests to just-added exercises once they load. */
+      // `fixed`: keys of exercises whose set count was chosen (a routine's target, a repeated workout's sets).
+      const fillHistory = async (added: ActiveExercise[], fixed: Set<string>) => {
+        if (!added.length) return;
+        const { prev, bests } = await history(added.map((e) => e.exercise.id));
+        const keys = new Set(added.map((e) => e.key));
+        set((s) =>
           s.active
-            ? { active: { ...s.active, exercises: s.active.exercises.map((e) => (e.key === exKey ? fn(e) : e)) } }
+            ? {
+                active: {
+                  ...s.active,
+                  exercises: s.active.exercises.map((e) =>
+                    keys.has(e.key) ? withHistory(e, prev[e.exercise.id] ?? [], bests[e.exercise.id], fixed.has(e.key)) : e
+                  ),
+                },
+              }
             : s
         );
+      };
 
       return {
         active: null,
@@ -217,61 +246,46 @@ export const useWorkout = create<WorkoutState>()(
         start: async (routine) => {
           const now = new Date();
           const name = routine?.name ?? `${now.toLocaleDateString(undefined, { weekday: 'long' })} workout`;
+          // The exercises show straight away; last time's numbers fill in when they arrive.
+          const fixed = new Set<string>();
+          const exercises = (routine?.routine_exercises ?? []).map((r) => {
+            const e = buildExercise(r.exercises, [], undefined, r.target_sets, r.rest_seconds);
+            if (r.target_sets > 0) fixed.add(e.key);
+            return e;
+          });
           set({
-            active: { name, routineId: routine?.id ?? null, startedAt: now.toISOString(), exercises: [], unit: currentUnits().weight },
+            active: {
+              name,
+              routineId: routine?.id ?? null,
+              startedAt: now.toISOString(),
+              exercises,
+              unit: currentUnits().weight,
+            },
             rest: null,
           });
-          if (routine?.routine_exercises.length) {
-            const { prev, bests } = await history(routine.routine_exercises.map((r) => r.exercise_id));
-            set((s) =>
-              s.active
-                ? {
-                    active: {
-                      ...s.active,
-                      exercises: routine.routine_exercises.map((r) =>
-                        buildExercise(r.exercises, prev[r.exercise_id] ?? [], bests[r.exercise_id], r.target_sets, r.rest_seconds)
-                      ),
-                    },
-                  }
-                : s
-            );
-          }
+          await fillHistory(exercises, fixed);
         },
 
         startWith: async (name, exercises) => {
+          const fixed = new Set<string>();
+          const built = exercises.map((e) => {
+            const x = buildExercise(e.exercise, [], undefined, e.sets);
+            if (e.sets > 0) fixed.add(x.key);
+            return x;
+          });
           set({
-            active: { name, routineId: null, startedAt: new Date().toISOString(), exercises: [], unit: currentUnits().weight },
+            active: { name, routineId: null, startedAt: new Date().toISOString(), exercises: built, unit: currentUnits().weight },
             rest: null,
           });
-          const { prev, bests } = await history(exercises.map((e) => e.exercise.id));
-          set((s) =>
-            s.active
-              ? {
-                  active: {
-                    ...s.active,
-                    exercises: exercises.map((e) =>
-                      buildExercise(e.exercise, prev[e.exercise.id] ?? [], bests[e.exercise.id], e.sets)
-                    ),
-                  },
-                }
-              : s
-          );
+          await fillHistory(built, fixed);
         },
 
         rename: (name) => set((s) => (s.active ? { active: { ...s.active, name } } : s)),
 
         addExercises: async (exercises) => {
-          const { prev, bests } = await history(exercises.map((e) => e.id));
-          set((s) =>
-            s.active
-              ? {
-                  active: {
-                    ...s.active,
-                    exercises: [...s.active.exercises, ...exercises.map((e) => buildExercise(e, prev[e.id] ?? [], bests[e.id], 0))],
-                  },
-                }
-              : s
-          );
+          const built = exercises.map((e) => buildExercise(e, [], undefined, 0));
+          set((s) => (s.active ? { active: { ...s.active, exercises: [...s.active.exercises, ...built] } } : s));
+          await fillHistory(built, new Set());
         },
 
         removeExercise: (exKey) =>
@@ -317,7 +331,10 @@ export const useWorkout = create<WorkoutState>()(
           if (!ex || index < 0) return { done: false, pr: null };
           const target = ex.sets[index];
           if (target.done) {
-            mapExercise(exKey, (e) => ({ ...e, sets: e.sets.map((x) => (x.key === setKey ? { ...x, done: false, pr: false } : x)) }));
+            mapExercise(exKey, (e) => ({
+              ...e,
+              sets: e.sets.map((x) => (x.key === setKey ? { ...x, done: false, pr: false } : x)),
+            }));
             return { done: false, pr: null };
           }
           const next = { ...filled(ex, index, unit), done: true };
@@ -326,7 +343,9 @@ export const useWorkout = create<WorkoutState>()(
           next.pr = !!pr;
           mapExercise(exKey, (e) => ({ ...e, sets: e.sets.map((x) => (x.key === setKey ? next : x)) }));
           if (ex.restSeconds > 0 && target.setType !== 'warmup') {
-            set({ rest: { endsAt: Date.now() + ex.restSeconds * 1000, duration: ex.restSeconds, exerciseName: ex.exercise.name } });
+            set({
+              rest: { endsAt: Date.now() + ex.restSeconds * 1000, duration: ex.restSeconds, exerciseName: ex.exercise.name },
+            });
           }
           return { done: true, pr };
         },
@@ -336,7 +355,13 @@ export const useWorkout = create<WorkoutState>()(
         adjustRest: (delta) =>
           set((s) =>
             s.rest
-              ? { rest: { ...s.rest, endsAt: Math.max(Date.now(), s.rest.endsAt + delta * 1000), duration: Math.max(0, s.rest.duration + delta) } }
+              ? {
+                  rest: {
+                    ...s.rest,
+                    endsAt: Math.max(Date.now(), s.rest.endsAt + delta * 1000),
+                    duration: Math.max(0, s.rest.duration + delta),
+                  },
+                }
               : s
           ),
 
@@ -358,7 +383,8 @@ export const useWorkout = create<WorkoutState>()(
                 .map((s) => {
                   // Cardio is entered as km and minutes; everything is stored as metres and seconds.
                   const cardio = ex.exercise.kind === 'distance_time';
-                  const n = (v: string, mult = 1) => (v === '' ? null : Math.round(Number(v.replace(',', '.')) * mult * 100) / 100);
+                  const n = (v: string, mult = 1) =>
+                    v === '' ? null : Math.round(Number(v.replace(',', '.')) * mult * 100) / 100;
                   return {
                     set_type: s.setType,
                     weight_kg: s.weight === '' ? null : Math.round(toKg(num(s.weight), unit) * 100) / 100,

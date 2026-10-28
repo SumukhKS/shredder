@@ -81,9 +81,9 @@ export default function Today() {
   const [editing, setEditing] = useState(false);
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const today = toDay();
-  const day = useQuery(() => loadToday(today), today);
-  const week = useQuery(() => loadWeek(today), today);
-  const weeks = useQuery(fetchWorkoutWeeks);
+  const day = useQuery(() => loadToday(today), today, { cache: 'today' });
+  const week = useQuery(() => loadWeek(today), today, { cache: 'today-week' });
+  const weeks = useQuery(fetchWorkoutWeeks, '', { cache: 'workout-weeks' });
   const userId = session?.user.id;
 
   // Pull the last week of steps and sleep when the screen comes back into view (at most every

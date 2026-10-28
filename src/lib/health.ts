@@ -160,7 +160,11 @@ export async function sleepNight(day: string): Promise<SleepNight | null> {
   const from = fromDay(addDays(day, -1)).getTime() + 18 * 3600_000;
   const to = fromDay(day).getTime() + 18 * 3600_000;
   const { records } = await readRecords('SleepSession', {
-    timeRangeFilter: { operator: 'between', startTime: new Date(from - 12 * 3600_000).toISOString(), endTime: new Date(to).toISOString() },
+    timeRangeFilter: {
+      operator: 'between',
+      startTime: new Date(from - 12 * 3600_000).toISOString(),
+      endTime: new Date(to).toISOString(),
+    },
   });
   const nights = records
     .map((r) => ({
@@ -199,7 +203,10 @@ export async function syncHealth(userId: string, to: string, days = 7): Promise<
     const had = rows.get(day);
     // A number typed in by hand wins over the sync for that day.
     const manual = had?.source === 'manual';
-    const next: { steps: number | null; sleep_min: number | null } = { steps: had?.steps ?? null, sleep_min: had?.sleep_min ?? null };
+    const next: { steps: number | null; sleep_min: number | null } = {
+      steps: had?.steps ?? null,
+      sleep_min: had?.sleep_min ?? null,
+    };
     let changed = false;
     const st = steps[day] ?? 0;
     const sl = Math.min(sleep[day] ?? 0, 1440);
@@ -211,7 +218,14 @@ export async function syncHealth(userId: string, to: string, days = 7): Promise<
       next.sleep_min = sl;
       changed = true;
     }
-    if (changed) updates.push({ user_id: userId, day, ...next, source: manual ? 'manual' : 'health_connect', updated_at: new Date().toISOString() });
+    if (changed)
+      updates.push({
+        user_id: userId,
+        day,
+        ...next,
+        source: manual ? 'manual' : 'health_connect',
+        updated_at: new Date().toISOString(),
+      });
   }
   for (let i = 0; i < updates.length; i += 200) {
     const { error } = await supabase.from('daily_health').upsert(updates.slice(i, i + 200), { onConflict: 'user_id,day' });
@@ -220,7 +234,8 @@ export async function syncHealth(userId: string, to: string, days = 7): Promise<
   return true;
 }
 
-let backfilled = false;
+// Set once the past year has been pulled for an account; later syncs only need the last week.
+const BACKFILL_KEY = 'shredder.healthBackfill';
 let lastSync = 0;
 
 /**
@@ -233,10 +248,14 @@ export async function syncHealthThrottled(userId: string, today: string, force =
   return syncHealth(userId, today);
 }
 
-/** Once per app session, pull the past year (as far back as Health Connect allows). */
-export async function backfillHealth(userId: string, today: string): Promise<boolean> {
-  if (backfilled) return false;
+/**
+ * Pull the past year (as far back as Health Connect allows) once per account on this phone, or
+ * again with `force` (right after connecting). It reads a year of records, so it isn't repeated
+ * on every launch.
+ */
+export async function backfillHealth(userId: string, today: string, force = false): Promise<boolean> {
+  if (!force && localStorage.getItem(BACKFILL_KEY) === userId) return false;
   const ok = await syncHealth(userId, today, 365);
-  if (ok) backfilled = true;
+  if (ok) localStorage.setItem(BACKFILL_KEY, userId);
   return ok;
 }

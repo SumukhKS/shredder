@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ExerciseDemo } from '@/components/exercise-demo';
@@ -13,8 +13,6 @@ import { useColors } from '@/components/ui/theme';
 import { Radius, Space } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { useQuery } from '@/lib/use-query';
-import { suggestMerges } from '@/lib/exercise-match';
-import { libraryAlias } from '@/lib/hevy';
 import { fetchExercises, matchesSearch, MUSCLE_LABELS } from '@/lib/workouts';
 import { usePicker } from '@/stores/picker';
 import { useSession } from '@/stores/session';
@@ -29,7 +27,7 @@ export default function ExercisePicker() {
   const addToWorkout = useWorkout((s) => s.addExercises);
   const setPicked = usePicker((s) => s.set);
   const userId = useSession((s) => s.session?.user.id);
-  const { data, reload } = useQuery(fetchExercises);
+  const { data, reload, error, loading } = useQuery(fetchExercises, '', { cache: 'exercises' });
   const [query, setQuery] = useState('');
   const [muscle, setMuscle] = useState<string | null>(null);
   const [selected, setSelected] = useState<Exercise[]>([]);
@@ -40,26 +38,13 @@ export default function ExercisePicker() {
     return (data ?? []).filter((e) => (!muscle || e.primary_muscle === muscle) && (!q || matchesSearch(e.name, q)));
   }, [data, query, muscle]);
 
-  // Custom exercises that are really library ones (usually from a Hevy import made before the library had them).
-  const mergeable = useMemo(() => {
-    const all = data ?? [];
-    const customs = all.filter((e) => e.created_by && e.created_by === userId);
-    return customs.length
-      ? suggestMerges(
-          customs,
-          all.filter((e) => !e.created_by),
-          libraryAlias
-        ).length
-      : 0;
-  }, [data, userId]);
-
   function toggle(e: Exercise) {
     setSelected((s) => (s.some((x) => x.id === e.id) ? s.filter((x) => x.id !== e.id) : [...s, e]));
   }
 
   async function confirm() {
     if (mode === 'routine') setPicked(selected);
-    else await addToWorkout(selected);
+    else addToWorkout(selected);
     router.back();
   }
 
@@ -82,18 +67,6 @@ export default function ExercisePicker() {
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <View style={{ padding: Space.lg, paddingBottom: Space.md }}>
         <Field value={query} onChangeText={setQuery} placeholder="Search exercises" autoCorrect={false} />
-        {mergeable ? (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push('/exercise/match')}
-            style={[styles.banner, { backgroundColor: c.primarySoft, borderColor: c.primary }]}>
-            <Ionicons name="git-merge-outline" size={20} color={c.primary} />
-            <AppText variant="smallBold" style={{ flex: 1 }}>
-              {mergeable} of your custom exercises {mergeable === 1 ? 'is' : 'are'} in the library now. Tap to match them.
-            </AppText>
-            <Ionicons name="chevron-forward" size={18} color={c.textMuted} />
-          </Pressable>
-        ) : null}
       </View>
       <ChipRow>
         <Chip label="All" selected={!muscle} onPress={() => setMuscle(null)} />
@@ -112,6 +85,15 @@ export default function ExercisePicker() {
             <View style={{ gap: Space.md, alignItems: 'center', paddingTop: Space.xl }}>
               <AppText color="textMuted">No exercise called “{query.trim()}”.</AppText>
               <Button label={`Create “${query.trim()}”`} variant="secondary" loading={creating} onPress={createCustom} />
+            </View>
+          ) : loading ? (
+            <ActivityIndicator color={c.primary} style={{ paddingTop: Space.xl }} />
+          ) : error ? (
+            <View style={{ gap: Space.md, alignItems: 'center', paddingTop: Space.xl }}>
+              <AppText color="textMuted" align="center">
+                Couldn&apos;t load the exercises. {error}
+              </AppText>
+              <Button label="Try again" variant="secondary" icon="refresh" onPress={reload} />
             </View>
           ) : undefined
         }
@@ -164,14 +146,5 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   avatar: { width: 44, height: 44 },
-  banner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.sm,
-    marginTop: Space.md,
-    padding: Space.md,
-    borderRadius: Radius.row,
-    borderWidth: 1.5,
-  },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: Space.lg, paddingTop: Space.md },
 });

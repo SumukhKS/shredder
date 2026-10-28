@@ -32,12 +32,16 @@ export default function Train() {
   const router = useRouter();
   const active = useWorkout((s) => s.active);
   const start = useWorkout((s) => s.start);
-  const routines = useQuery(fetchRoutines);
+  const routines = useQuery(fetchRoutines, '', { cache: 'routines' });
   // The whole history, a page at a time: the newest page reloads on focus, older pages load on scroll.
-  const history = useQuery(async () => {
-    const [page, total] = await Promise.all([loadPage(0), countWorkouts()]);
-    return { ...page, total };
-  });
+  const history = useQuery(
+    async () => {
+      const [page, total] = await Promise.all([loadPage(0), countWorkouts()]);
+      return { ...page, total };
+    },
+    '',
+    { cache: 'history' }
+  );
   const [older, setOlder] = useState<Page>({ workouts: [], exercises: {} });
   const [loadingMore, setLoadingMore] = useState(false);
   const seen = new Set<string>();
@@ -66,7 +70,7 @@ export default function Train() {
         { text: 'Cancel', style: 'cancel' },
       ]);
     }
-    await start(routine);
+    start(routine);
     router.push('/workout/active');
   }
 

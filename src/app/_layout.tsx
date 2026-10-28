@@ -44,8 +44,12 @@ export default function RootLayout() {
   const userId = session?.user.id;
   const onboardedNow = !!profile?.onboarded;
   useEffect(() => {
-    if (!userId || !onboardedNow || useWorkout.getState().active) return;
-    autoMergeExercises(userId).catch(() => {});
+    if (!userId || !onboardedNow) return;
+    // A little after launch, so it doesn't compete with the first screen for the network.
+    const t = setTimeout(() => {
+      if (!useWorkout.getState().active) autoMergeExercises(userId).catch(() => {});
+    }, 8000);
+    return () => clearTimeout(t);
   }, [userId, onboardedNow]);
 
   if (!appReady) return null;

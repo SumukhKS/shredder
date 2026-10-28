@@ -2,6 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import { create } from 'zustand';
 
 import { supabase } from '@/lib/supabase';
+import { clearQueryCache } from '@/lib/use-query';
 import type { Profile } from '@/types/db';
 
 interface SessionState {
@@ -51,8 +52,8 @@ export const useSession = create<SessionState>((set, get) => ({
       if (!session) {
         set({ profile: null });
         localStorage.removeItem(PROFILE_KEY);
-      }
-      else if (session.user.id !== prev?.user.id) {
+        clearQueryCache();
+      } else if (session.user.id !== prev?.user.id) {
         // Defer: Supabase recommends not awaiting other client calls inside this callback.
         setTimeout(() => get().refreshProfile(), 0);
       }
@@ -75,7 +76,11 @@ export const useSession = create<SessionState>((set, get) => ({
     if (!userId) return;
     // XP and streak columns are server-owned; strip them defensively.
     const { total_xp, current_streak, longest_streak, last_active_day, id, ...writable } = patch;
-    void total_xp; void current_streak; void longest_streak; void last_active_day; void id;
+    void total_xp;
+    void current_streak;
+    void longest_streak;
+    void last_active_day;
+    void id;
     const { data, error } = await supabase.from('profiles').update(writable).eq('id', userId).select('*').single();
     if (error) throw error;
     set({ profile: data as Profile });
@@ -86,5 +91,6 @@ export const useSession = create<SessionState>((set, get) => ({
     await supabase.auth.signOut();
     set({ session: null, profile: null });
     localStorage.removeItem(PROFILE_KEY);
+    clearQueryCache();
   },
 }));
