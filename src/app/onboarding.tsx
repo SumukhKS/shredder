@@ -11,6 +11,8 @@ import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Space } from '@/constants/theme';
 import { computeTargets } from '@/lib/nutrition';
+import { toCm, toKg, useUnits } from '@/lib/units';
+import { useAppSettings } from '@/stores/app-settings';
 import { useSession } from '@/stores/session';
 import type { ActivityLevel, Goal, Sex } from '@/types/db';
 
@@ -44,9 +46,12 @@ export default function Onboarding() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const units = useUnits();
+  const setUnits = useAppSettings((s) => s.setUnits);
   const ageN = Number(age);
-  const heightN = Number(height);
-  const weightN = Number(weight);
+  // Stored and calculated in cm and kg whatever is typed.
+  const heightN = Math.round(toCm(Number(height), units.length) * 10) / 10;
+  const weightN = Math.round(toKg(Number(weight), units.weight) * 10) / 10;
   const bodyValid = ageN >= 13 && ageN <= 90 && heightN >= 120 && heightN <= 230 && weightN >= 30 && weightN <= 250;
 
   const targets = useMemo(
@@ -120,8 +125,34 @@ export default function Onboarding() {
               onChange={setSex}
             />
             <Field label="Age" value={age} onChangeText={setAge} keyboardType="number-pad" placeholder="24" suffix="years" />
-            <Field label="Height" value={height} onChangeText={setHeight} keyboardType="decimal-pad" placeholder="172" suffix="cm" />
-            <Field label="Weight" value={weight} onChangeText={setWeight} keyboardType="decimal-pad" placeholder="74" suffix="kg" />
+            <Segmented<'metric' | 'imperial'>
+              options={[
+                { key: 'metric', label: 'kg, cm' },
+                { key: 'imperial', label: 'lb, in' },
+              ]}
+              value={units.weight === 'kg' ? 'metric' : 'imperial'}
+              onChange={(v) => {
+                setUnits(v === 'metric' ? { weightUnit: 'kg', lengthUnit: 'cm' } : { weightUnit: 'lb', lengthUnit: 'in' });
+                setHeight('');
+                setWeight('');
+              }}
+            />
+            <Field
+              label="Height"
+              value={height}
+              onChangeText={setHeight}
+              keyboardType="decimal-pad"
+              placeholder={units.length === 'cm' ? '172' : '68'}
+              suffix={units.length}
+            />
+            <Field
+              label="Weight"
+              value={weight}
+              onChangeText={setWeight}
+              keyboardType="decimal-pad"
+              placeholder={units.weight === 'kg' ? '74' : '163'}
+              suffix={units.weight}
+            />
           </>
         ) : null}
 

@@ -13,7 +13,7 @@ import { Space } from '@/constants/theme';
 import { addDays, fromDay, mondayOf, toDay } from '@/lib/dates';
 import { supabase } from '@/lib/supabase';
 import { useQuery } from '@/lib/use-query';
-import { formatVolume } from '@/lib/workouts';
+import { formatVolume, formatWeight, toKg, useUnits, weightNumber } from '@/lib/units';
 import { fetchWorkoutWeeks, refreshStreaks, weekStreaks } from '@/lib/streak';
 import { useSession } from '@/stores/session';
 
@@ -50,6 +50,8 @@ async function load(): Promise<ProgressData> {
 export default function Progress() {
   const c = useColors();
   const profile = useSession((s) => s.profile);
+  const units = useUnits();
+  const u = units.weight;
   const q = useQuery(load);
   const [logging, setLogging] = useState(false);
 
@@ -90,19 +92,19 @@ export default function Progress() {
         {weights.length ? (
           <>
             <View style={styles.row}>
-              <AppText variant="hero">{Number(latest.weight_kg)}</AppText>
-              <AppText variant="h3" color="textMuted">kg</AppText>
+              <AppText variant="hero">{weightNumber(latest.weight_kg, u)}</AppText>
+              <AppText variant="h3" color="textMuted">{u}</AppText>
               <View style={{ flex: 1 }} />
               {weights.length > 1 ? (
                 <AppText variant="bodyBold" color={change <= 0 ? 'success' : 'accent'}>
                   {change > 0 ? '+' : ''}
-                  {change.toFixed(1)} kg since {fromDay(first.day).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                  {weightNumber(change, u).toFixed(1)} {u} since {fromDay(first.day).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
                 </AppText>
               ) : null}
             </View>
             {weights.length > 1 ? (
               <LineChart
-                values={weights.map((x) => Number(x.weight_kg))}
+                values={weights.map((x) => weightNumber(x.weight_kg, u))}
                 labels={weights.map((x) => fromDay(x.day).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}
                 color={c.primary}
               />
@@ -118,9 +120,9 @@ export default function Progress() {
       <SectionHeader title="Weekly volume" />
       <Card style={{ gap: Space.sm }}>
         <AppText variant="bodyBold">
-          {formatVolume(weekVolumes[weekVolumes.length - 1])} this week
+          {formatVolume(weekVolumes[weekVolumes.length - 1], u)} this week
         </AppText>
-        <BarChart values={weekVolumes} labels={weekLabels} color={c.accent} />
+        <BarChart values={weekVolumes.map((v) => weightNumber(v, u))} labels={weekLabels} color={c.accent} />
       </Card>
 
       <SectionHeader title="Personal records" />
@@ -134,11 +136,11 @@ export default function Progress() {
               <View style={{ flex: 1 }}>
                 <AppText variant="bodyBold">{p.exercises.name}</AppText>
                 <AppText variant="small" color="textMuted">
-                  {Number(p.best_weight)} kg × {p.reps}
+                  {formatWeight(p.best_weight, u)} × {p.reps}
                 </AppText>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <AppText variant="h3">{Number(p.best_e1rm)} kg</AppText>
+                <AppText variant="h3">{formatWeight(p.best_e1rm, u)}</AppText>
                 <AppText variant="small" color="textMuted">est. 1RM</AppText>
               </View>
             </View>
@@ -149,12 +151,15 @@ export default function Progress() {
       <NumberSheet
         visible={logging}
         title="Today's weight"
-        suffix="kg"
+        suffix={u}
         decimal
-        initial={latest ? String(Number(latest.weight_kg)) : profile.weight_kg ? String(profile.weight_kg) : ''}
+        initial={
+          latest ? String(weightNumber(latest.weight_kg, u)) : profile.weight_kg ? String(weightNumber(profile.weight_kg, u)) : ''
+        }
         onClose={() => setLogging(false)}
-        onSave={async (n) => {
-          if (n < 30 || n > 300) throw new Error('Enter a weight between 30 and 300 kg.');
+        onSave={async (typed) => {
+          const n = toKg(typed, u);
+          if (n < 30 || n > 300) throw new Error(`Enter a weight between ${formatWeight(30, u)} and ${formatWeight(300, u)}.`);
           const { error } = await supabase
             .from('body_metrics')
             .upsert({ user_id: profile.id, day: toDay(), weight_kg: Math.round(n * 10) / 10 }, { onConflict: 'user_id,day' });

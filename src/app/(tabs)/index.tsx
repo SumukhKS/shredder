@@ -32,6 +32,7 @@ import { greeting, toDay } from '@/lib/dates';
 import { HABITS } from '@/lib/habits';
 import { backfillHealth, syncHealthThrottled } from '@/lib/health';
 import { dayStreak, fetchWorkoutWeeks, weekStreaks } from '@/lib/streak';
+import { toKg } from '@/lib/units';
 import { useQuery } from '@/lib/use-query';
 import { fetchWorkoutExercises } from '@/lib/workouts';
 import { useSession } from '@/stores/session';
@@ -244,7 +245,7 @@ export default function Today() {
                       .filter((s) => s.done)
                       .map((s) => ({
                         set_type: s.setType,
-                        weight_kg: Number(s.weight) || null,
+                        weight_kg: toKg(Number(s.weight) || 0, active.unit ?? 'kg') || null,
                         reps: Number(s.reps) || null,
                         duration_s: null,
                         distance_m: null,

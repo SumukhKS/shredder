@@ -4,7 +4,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Radius, Space, withAlpha } from '@/constants/theme';
 import { dayLabel, formatDuration } from '@/lib/dates';
-import { describeSet, formatVolume, summarizeSets, type ExerciseLog } from '@/lib/workouts';
+import { formatVolume, useUnits } from '@/lib/units';
+import { describeSet, summarizeSets, type ExerciseLog } from '@/lib/workouts';
 import type { WorkoutSummary } from '@/types/db';
 
 import { ExerciseDemo } from './exercise-demo';
@@ -74,11 +75,12 @@ export function WorkoutDetailCard({
 }) {
   const c = useColors();
   const router = useRouter();
+  const units = useUnits();
   return (
     <Card style={{ gap: Space.lg }}>
       <WorkoutHeader workout={workout} onEdit={onEdit} onOptions={onOptions} />
       <View style={[styles.stats, { borderColor: c.hairline }]}>
-        <Stat label="Volume" value={formatVolume(Number(workout.total_volume))} />
+        <Stat label="Volume" value={formatVolume(Number(workout.total_volume), units.weight)} />
         <Stat label="Sets" value={String(workout.total_sets)} />
         <Stat label="PRs" value={String(workout.pr_count)} />
       </View>
@@ -115,7 +117,7 @@ export function WorkoutDetailCard({
                   <AppText variant="bodyBold" color="textMuted" style={{ width: 24 }}>
                     {warmup ? 'W' : n}
                   </AppText>
-                  <AppText variant="body">{describeSet(e.kind, s)}</AppText>
+                  <AppText variant="body">{describeSet(e.kind, s, units.weight)}</AppText>
                   {s.is_pr ? <PrBadge size={22} /> : null}
                 </View>
               );
@@ -205,6 +207,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 /** Exercise names, each with its working sets in a line ("3 × 8 @ 80 kg"). */
 export function ExerciseList({ exercises, more = 0 }: { exercises: ExerciseLog[]; more?: number }) {
+  const units = useUnits();
   if (!exercises.length) return null;
   return (
     <View style={styles.list}>
@@ -216,7 +219,7 @@ export function ExerciseList({ exercises, more = 0 }: { exercises: ExerciseLog[]
               {e.name}
             </AppText>
             <AppText variant="small" color="textMuted" numberOfLines={1}>
-              {summarizeSets(e.kind, e.sets)}
+              {summarizeSets(e.kind, e.sets, units.weight)}
             </AppText>
           </View>
         </View>

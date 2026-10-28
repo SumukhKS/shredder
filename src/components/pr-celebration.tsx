@@ -17,6 +17,7 @@ import Animated, {
 import { create } from 'zustand';
 
 import { Space } from '@/constants/theme';
+import { formatWeight, useUnits } from '@/lib/units';
 import type { PrHit } from '@/stores/workout';
 
 import { PrBadge } from './pr-badge';
@@ -53,6 +54,7 @@ export function PrCelebrationHost() {
 
 function Burst({ hit, onDone }: { hit: PrHit; onDone: () => void }) {
   const c = useColors();
+  const units = useUnits();
   const pop = useSharedValue(0);
   const tilt = useSharedValue(0);
   const spin = useSharedValue(0);
@@ -94,8 +96,8 @@ function Burst({ hit, onDone }: { hit: PrHit; onDone: () => void }) {
           ? 'New 1RM record'
           : 'Rep record';
   const details = [
-    hit.bodyweight ? `${hit.reps} reps` : `${hit.weight} kg × ${hit.reps}`,
-    hit.e1rm != null ? `est. 1RM ${hit.e1rm} kg` : null,
+    hit.bodyweight ? `${hit.reps} reps` : `${formatWeight(hit.weight, units.weight)} × ${hit.reps}`,
+    hit.e1rm != null ? `est. 1RM ${formatWeight(hit.e1rm, units.weight)}` : null,
   ].filter(Boolean);
 
   return (

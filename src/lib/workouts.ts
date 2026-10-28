@@ -2,6 +2,7 @@ import { formatDuration } from '@/lib/dates';
 import type { ExerciseSession, HistorySet } from '@/lib/history-stats';
 import { supabase } from '@/lib/supabase';
 import type { Exercise, ExerciseKind, Routine, WorkoutSummary } from '@/types/db';
+import { weightNumber, type WeightUnit } from '@/lib/units';
 
 export interface PreviousSet {
   weight_kg: number | null;
@@ -208,13 +209,13 @@ export async function fetchWorkoutExercises(workoutIds: string[]): Promise<Recor
   return out;
 }
 
-/** One set in words, e.g. "80 kg × 8" or "5 km in 25m". */
-export function describeSet(kind: ExerciseKind, s: LoggedSet): string {
+/** One set in words, e.g. "80 kg × 8" (or "176.4 lb × 8") or "5 km in 25m". */
+export function describeSet(kind: ExerciseKind, s: LoggedSet, u: WeightUnit): string {
   switch (kind) {
     case 'weight_reps':
-      return `${Number(s.weight_kg ?? 0)} kg × ${s.reps}`;
+      return `${weightNumber(s.weight_kg ?? 0, u)} ${u} × ${s.reps}`;
     case 'bodyweight_reps':
-      return s.weight_kg ? `+${Number(s.weight_kg)} kg × ${s.reps}` : `${s.reps} reps`;
+      return s.weight_kg ? `+${weightNumber(s.weight_kg, u)} ${u} × ${s.reps}` : `${s.reps} reps`;
     case 'duration':
       return formatDuration(s.duration_s ?? 0);
     case 'distance_time':
@@ -226,22 +227,22 @@ export function describeSet(kind: ExerciseKind, s: LoggedSet): string {
  * The working sets of one exercise in a line: "3 × 8 @ 80 kg" when they match,
  * "80 kg × 8, 8, 6" at one weight, "60×10, 80×8, 85×6 kg" otherwise. Warm-ups are left out.
  */
-export function summarizeSets(kind: ExerciseKind, sets: LoggedSet[]): string {
+export function summarizeSets(kind: ExerciseKind, sets: LoggedSet[], u: WeightUnit): string {
   const work = sets.filter((s) => s.set_type !== 'warmup');
   if (work.length === 0) return sets.length ? `${sets.length} warm-up set${sets.length > 1 ? 's' : ''}` : 'No sets';
-  const weights = new Set(work.map((s) => Number(s.weight_kg ?? 0)));
+  const w = (s: LoggedSet) => weightNumber(s.weight_kg ?? 0, u);
+  const weights = new Set(work.map(w));
   const reps = new Set(work.map((s) => s.reps ?? 0));
   if (kind === 'weight_reps' || (kind === 'bodyweight_reps' && !weights.has(0))) {
-    const w = Number(work[0].weight_kg ?? 0);
-    const unit = kind === 'bodyweight_reps' ? `+${w} kg` : `${w} kg`;
+    const unit = kind === 'bodyweight_reps' ? `+${w(work[0])} ${u}` : `${w(work[0])} ${u}`;
     if (weights.size === 1 && reps.size === 1) return `${work.length} × ${work[0].reps} @ ${unit}`;
     if (weights.size === 1) return `${unit} × ${work.map((s) => s.reps).join(', ')}`;
-    return `${work.map((s) => `${Number(s.weight_kg ?? 0)}×${s.reps}`).join(', ')} kg`;
+    return `${work.map((s) => `${w(s)}×${s.reps}`).join(', ')} ${u}`;
   }
   if (kind === 'bodyweight_reps') {
     return reps.size === 1 ? `${work.length} × ${work[0].reps} reps` : `${work.map((s) => s.reps).join(', ')} reps`;
   }
-  const each = work.map((s) => describeSet(kind, s));
+  const each = work.map((s) => describeSet(kind, s, u));
   return new Set(each).size === 1 && each.length > 1 ? `${each.length} × ${each[0]}` : each.join(', ');
 }
 
@@ -274,11 +275,6 @@ export async function saveRoutine(params: { id?: string; name: string; exercises
     if (error) throw error;
   }
   return routineId!;
-}
-
-/** The full number, never shortened (12,450 kg, not 12.5t). */
-export function formatVolume(kg: number): string {
-  return `${Math.round(kg).toLocaleString()} kg`;
 }
 
 export const MUSCLE_LABELS: Record<string, string> = {

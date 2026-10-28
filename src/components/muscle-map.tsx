@@ -15,7 +15,8 @@ import Svg, { Path } from 'react-native-svg';
 
 import { Radius, Space, withAlpha } from '@/constants/theme';
 import { mainMuscle, MUSCLE_PARTS, MUSCLE_REGIONS, muscleLoad, type Muscle, type MuscleLoad } from '@/lib/body-shapes';
-import { formatVolume, MUSCLE_LABELS } from '@/lib/workouts';
+import { formatVolume, useUnits } from '@/lib/units';
+import { MUSCLE_LABELS } from '@/lib/workouts';
 import { useSession } from '@/stores/session';
 
 import { AppText } from './ui/text';
@@ -65,6 +66,7 @@ export function MuscleMap({
   }[];
 }) {
   const c = useColors();
+  const units = useUnits();
   const sex = useSession((s) => s.profile?.sex);
   const figure = FIGURES[sex === 'female' ? 'female' : 'male'];
   const loads = muscleLoad(exercises);
@@ -98,7 +100,7 @@ export function MuscleMap({
                     {MUSCLE_LABELS[m] ?? m}
                   </AppText>
                   <AppText variant="smallBold" color={l.primary ? 'text' : 'textMuted'}>
-                    {l.volume > 0 ? `${formatVolume(l.volume)}, ` : ''}
+                    {l.volume > 0 ? `${formatVolume(l.volume, units.weight)}, ` : ''}
                     {sets} set{sets === 1 ? '' : 's'}
                   </AppText>
                 </View>

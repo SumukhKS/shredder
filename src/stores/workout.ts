@@ -5,6 +5,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { toDay } from '@/lib/dates';
 import { supabase } from '@/lib/supabase';
+import { currentUnits, fromKg, toKg, type WeightUnit } from '@/lib/units';
 import { beatsAll, e1rm, fetchBests, fetchPreviousSets, type ExerciseBest, type PreviousSet } from '@/lib/workouts';
 import type { Exercise, ExerciseKind, FinishWorkoutResult, Routine, SetType } from '@/types/db';
 
@@ -34,6 +35,7 @@ export interface ActiveExercise {
 /** A personal record hit on a ticked set, for the medal animation. */
 export interface PrHit {
   exerciseName: string;
+  /** kg */
   weight: number;
   reps: number;
   /** New heaviest working weight. */
@@ -49,6 +51,8 @@ export interface ActiveWorkout {
   routineId: string | null;
   startedAt: string;
   exercises: ActiveExercise[];
+  /** The unit weights are typed in, fixed when the workout starts (older saved workouts: kg). */
+  unit?: WeightUnit;
 }
 
 interface RestTimer {
@@ -91,29 +95,31 @@ function emptySet(): ActiveSet {
   return { key: uid(), setType: 'normal', weight: '', reps: '', duration: '', distance: '', done: false };
 }
 
-function fromPrevious(kind: ExerciseKind, prev: PreviousSet | undefined, field: SetField): string {
+function fromPrevious(kind: ExerciseKind, prev: PreviousSet | undefined, field: SetField, unit: WeightUnit): string {
   if (!prev) return '';
   const cardio = kind === 'distance_time';
   const v = { weight: prev.weight_kg, reps: prev.reps, duration: prev.duration_s, distance: prev.distance_m }[field];
+  if (v == null) return '';
+  if (field === 'weight') return String(Math.round(fromKg(Number(v), unit) * 10) / 10);
   const div = field === 'duration' && cardio ? 60 : field === 'distance' && cardio ? 1000 : 1;
-  return v != null ? String(Math.round((Number(v) / div) * 100) / 100) : '';
+  return String(Math.round((Number(v) / div) * 100) / 100);
 }
 
 /**
  * The value a blank field stands for: whatever the set above logged (or would log),
  * and for the first set, the first set from last time.
  */
-export function placeholderFor(ex: ActiveExercise, index: number, field: SetField): string {
+export function placeholderFor(ex: ActiveExercise, index: number, field: SetField, unit: WeightUnit): string {
   for (let i = index - 1; i >= 0; i--) {
     const v = ex.sets[i][field];
     if (v !== '') return v;
   }
-  return fromPrevious(ex.exercise.kind, ex.previous[0], field);
+  return fromPrevious(ex.exercise.kind, ex.previous[0], field, unit);
 }
 
-function filled(ex: ActiveExercise, index: number): ActiveSet {
+function filled(ex: ActiveExercise, index: number, unit: WeightUnit): ActiveSet {
   const s = { ...ex.sets[index] };
-  for (const f of FIELDS) if (s[f] === '') s[f] = placeholderFor(ex, index, f);
+  for (const f of FIELDS) if (s[f] === '') s[f] = placeholderFor(ex, index, f, unit);
   return s;
 }
 
@@ -121,22 +127,24 @@ const num = (v: string) => Number(v.replace(',', '.')) || 0;
 
 /** Did this set beat everything before it, including earlier sets today? */
 // The first workout with an exercise is a baseline: with no past history there is nothing to beat.
-function detectPr(ex: ActiveExercise, index: number, set: ActiveSet): PrHit | null {
+function detectPr(ex: ActiveExercise, index: number, set: ActiveSet, unit: WeightUnit): PrHit | null {
   const kind = ex.exercise.kind;
   const history = ex.best?.history ?? [];
   if ((kind !== 'weight_reps' && kind !== 'bodyweight_reps') || set.setType === 'warmup' || !ex.best || !history.length) {
     return null;
   }
-  const weight = num(set.weight);
+  // History and bests are in kg; typed weights are converted (and rounded like the database keeps them).
+  const kg = (v: string) => Math.round(toKg(num(v), unit) * 100) / 100;
+  const weight = kg(set.weight);
   const reps = num(set.reps);
   const earlier = [...history];
   let bestWeight = ex.best.weight;
   let bestE1rm = ex.best.e1rm;
   ex.sets.forEach((x, i) => {
     if (i === index || !x.done || x.setType === 'warmup') return;
-    earlier.push({ weight: num(x.weight), reps: num(x.reps) });
-    bestWeight = Math.max(bestWeight, num(x.weight));
-    bestE1rm = Math.max(bestE1rm, e1rm(num(x.weight), num(x.reps)) ?? 0);
+    earlier.push({ weight: kg(x.weight), reps: num(x.reps) });
+    bestWeight = Math.max(bestWeight, kg(x.weight));
+    bestE1rm = Math.max(bestE1rm, e1rm(kg(x.weight), num(x.reps)) ?? 0);
   });
   if (!beatsAll(weight, reps, earlier)) return null;
   const est = e1rm(weight, reps);
@@ -209,7 +217,10 @@ export const useWorkout = create<WorkoutState>()(
         start: async (routine) => {
           const now = new Date();
           const name = routine?.name ?? `${now.toLocaleDateString(undefined, { weekday: 'long' })} workout`;
-          set({ active: { name, routineId: routine?.id ?? null, startedAt: now.toISOString(), exercises: [] }, rest: null });
+          set({
+            active: { name, routineId: routine?.id ?? null, startedAt: now.toISOString(), exercises: [], unit: currentUnits().weight },
+            rest: null,
+          });
           if (routine?.routine_exercises.length) {
             const { prev, bests } = await history(routine.routine_exercises.map((r) => r.exercise_id));
             set((s) =>
@@ -228,7 +239,10 @@ export const useWorkout = create<WorkoutState>()(
         },
 
         startWith: async (name, exercises) => {
-          set({ active: { name, routineId: null, startedAt: new Date().toISOString(), exercises: [] }, rest: null });
+          set({
+            active: { name, routineId: null, startedAt: new Date().toISOString(), exercises: [], unit: currentUnits().weight },
+            rest: null,
+          });
           const { prev, bests } = await history(exercises.map((e) => e.exercise.id));
           set((s) =>
             s.active
@@ -297,6 +311,7 @@ export const useWorkout = create<WorkoutState>()(
          * done, and the PR it set, if any (so the UI can celebrate).
          */
         toggleDone: (exKey, setKey) => {
+          const unit = get().active?.unit ?? 'kg';
           const ex = get().active?.exercises.find((e) => e.key === exKey);
           const index = ex ? ex.sets.findIndex((x) => x.key === setKey) : -1;
           if (!ex || index < 0) return { done: false, pr: null };
@@ -305,9 +320,9 @@ export const useWorkout = create<WorkoutState>()(
             mapExercise(exKey, (e) => ({ ...e, sets: e.sets.map((x) => (x.key === setKey ? { ...x, done: false, pr: false } : x)) }));
             return { done: false, pr: null };
           }
-          const next = { ...filled(ex, index), done: true };
+          const next = { ...filled(ex, index, unit), done: true };
           if (!setIsValid(ex, next)) return { done: false, pr: null };
-          const pr = detectPr(ex, index, next);
+          const pr = detectPr(ex, index, next, unit);
           next.pr = !!pr;
           mapExercise(exKey, (e) => ({ ...e, sets: e.sets.map((x) => (x.key === setKey ? next : x)) }));
           if (ex.restSeconds > 0 && target.setType !== 'warmup') {
@@ -332,6 +347,7 @@ export const useWorkout = create<WorkoutState>()(
         finish: async () => {
           const active = get().active;
           if (!active) throw new Error('No active workout');
+          const unit = active.unit ?? 'kg';
 
           const exercises = active.exercises
             .map((ex) => ({
@@ -345,7 +361,7 @@ export const useWorkout = create<WorkoutState>()(
                   const n = (v: string, mult = 1) => (v === '' ? null : Math.round(Number(v.replace(',', '.')) * mult * 100) / 100);
                   return {
                     set_type: s.setType,
-                    weight_kg: n(s.weight),
+                    weight_kg: s.weight === '' ? null : Math.round(toKg(num(s.weight), unit) * 100) / 100,
                     reps: n(s.reps),
                     duration_s: n(s.duration, cardio ? 60 : 1),
                     distance_m: n(s.distance, cardio ? 1000 : 1),
@@ -387,11 +403,16 @@ export function completedSetCount(active: ActiveWorkout | null) {
   return active.exercises.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
 }
 
+/** Volume lifted so far, in kg. */
 export function liveVolume(active: ActiveWorkout | null) {
   if (!active) return 0;
+  const unit = active.unit ?? 'kg';
   return active.exercises.reduce(
     (v, e) =>
-      v + e.sets.filter((s) => s.done && s.setType !== 'warmup').reduce((a, s) => a + (Number(s.weight) || 0) * (Number(s.reps) || 0), 0),
+      v +
+      e.sets
+        .filter((s) => s.done && s.setType !== 'warmup')
+        .reduce((a, s) => a + toKg(Number(s.weight) || 0, unit) * (Number(s.reps) || 0), 0),
     0
   );
 }

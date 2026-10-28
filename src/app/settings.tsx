@@ -7,6 +7,7 @@ import { StyleSheet, Switch, View } from 'react-native';
 import { checkForAppUpdate } from '@/components/update-banner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Segmented } from '@/components/ui/chips';
 import { Field } from '@/components/ui/field';
 import { Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
@@ -15,13 +16,14 @@ import { Space } from '@/constants/theme';
 import { toDay } from '@/lib/dates';
 import { backfillHealth, connectHealth, healthStatus, openHealthSettings, type HealthStatus } from '@/lib/health';
 import { computeTargets, DEFAULT_SPLIT, macroSplit, scaleMacros } from '@/lib/nutrition';
+import { formatWeight } from '@/lib/units';
 import { useAppSettings } from '@/stores/app-settings';
 import { useSession } from '@/stores/session';
 
 export default function Settings() {
   const c = useColors();
   const { profile, updateProfile, signOut, session } = useSession();
-  const { autoUpdate, setAutoUpdate } = useAppSettings();
+  const { autoUpdate, setAutoUpdate, weightUnit, lengthUnit, setUnits } = useAppSettings();
   const [form, setForm] = useState(() => ({
     display_name: profile?.display_name ?? '',
     calorie_target: String(profile?.calorie_target ?? ''),
@@ -134,7 +136,7 @@ export default function Settings() {
       water_ml_target: String(t.water),
     }));
     setSplit(macroSplit(t) ?? DEFAULT_SPLIT);
-    setMessage(`Recalculated from your latest weight, ${Number(profile.weight_kg)} kg. Save to apply.`);
+    setMessage(`Recalculated from your latest weight, ${formatWeight(Number(profile.weight_kg), weightUnit)}. Save to apply.`);
   }
 
   async function save() {
@@ -213,6 +215,31 @@ export default function Settings() {
         </AppText>
       ) : null}
       <Button label="Save changes" size="lg" loading={saving} onPress={save} />
+
+      <SectionHeader title="Units" />
+      <Card tone="flat" style={{ gap: Space.md }}>
+        <AppText variant="bodyBold">Weight</AppText>
+        <Segmented<'kg' | 'lb'>
+          options={[
+            { key: 'kg', label: 'Kilograms (kg)' },
+            { key: 'lb', label: 'Pounds (lb)' },
+          ]}
+          value={weightUnit}
+          onChange={(v) => setUnits({ weightUnit: v })}
+        />
+        <AppText variant="bodyBold">Height and measurements</AppText>
+        <Segmented<'cm' | 'in'>
+          options={[
+            { key: 'cm', label: 'Centimetres (cm)' },
+            { key: 'in', label: 'Inches (in)' },
+          ]}
+          value={lengthUnit}
+          onChange={(v) => setUnits({ lengthUnit: v })}
+        />
+        <AppText variant="small" color="textMuted">
+          Used for lifts, volume, PRs, body weight and measurements. A workout in progress keeps the unit it started with.
+        </AppText>
+      </Card>
 
       <SectionHeader title="Devices and apps" />
       <Card tone="flat" style={{ gap: Space.md }}>

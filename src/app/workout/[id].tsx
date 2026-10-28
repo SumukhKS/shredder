@@ -17,7 +17,8 @@ import { useColors } from '@/components/ui/theme';
 import { Space } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { useQuery } from '@/lib/use-query';
-import { describeSet, formatVolume } from '@/lib/workouts';
+import { formatVolume, useUnits } from '@/lib/units';
+import { describeSet } from '@/lib/workouts';
 import { useWorkout } from '@/stores/workout';
 import type { Exercise } from '@/types/db';
 
@@ -51,6 +52,7 @@ export default function WorkoutDetail() {
   const c = useColors();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const units = useUnits();
   const active = useWorkout((s) => s.active);
   const startWith = useWorkout((s) => s.startWith);
   const [menu, setMenu] = useState(false);
@@ -125,7 +127,7 @@ export default function WorkoutDetail() {
           <AppText variant="small" color="textMuted">
             Volume
           </AppText>
-          <AppText variant="stat">{formatVolume(Number(data.total_volume))}</AppText>
+          <AppText variant="stat">{formatVolume(Number(data.total_volume), units.weight)}</AppText>
         </Card>
         <Card style={styles.stat}>
           <AppText variant="small" color="textMuted">
@@ -177,7 +179,7 @@ export default function WorkoutDetail() {
                 <AppText variant="bodyBold" color="textMuted" style={{ width: 24 }}>
                   {s.set_type === 'warmup' ? 'W' : i + 1}
                 </AppText>
-                <AppText variant="body">{describeSet(we.exercises.kind, s)}</AppText>
+                <AppText variant="body">{describeSet(we.exercises.kind, s, units.weight)}</AppText>
                 {s.is_pr ? <PrBadge size={22} /> : null}
               </View>
             ))}

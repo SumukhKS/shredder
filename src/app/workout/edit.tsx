@@ -16,6 +16,7 @@ import { useColors } from '@/components/ui/theme';
 import { WeekCalendar } from '@/components/week-calendar';
 import { Fonts, Radius, Space } from '@/constants/theme';
 import { clock, fromDay, toDay } from '@/lib/dates';
+import { currentUnits, fromKg, toKg, type WeightUnit } from '@/lib/units';
 import { supabase } from '@/lib/supabase';
 import { usePicker } from '@/stores/picker';
 import type { Exercise, ExerciseKind, SetType } from '@/types/db';
@@ -70,6 +71,11 @@ const store = (v: string, mult = 1) => {
   return v.trim() === '' || !Number.isFinite(x) ? null : Math.round(x * mult * 100) / 100;
 };
 const pad = (x: number) => String(x).padStart(2, '0');
+/** A typed weight in `unit` -> kg, to the hundredth like the database keeps it; null when unreadable. */
+const weightKg = (v: string, unit: WeightUnit) => {
+  const x = store(v);
+  return x == null ? null : Math.round(toKg(x, unit) * 100) / 100;
+};
 
 /** Seconds in "1:05:30", "45:10" or "60" (a bare number is minutes); null when it can't be read. */
 function parseLength(text: string): number | null {
@@ -96,6 +102,8 @@ export default function EditWorkout() {
   // Length as h:mm:ss or m:ss (a plain number is minutes), and the start's seconds, so saving keeps it exact.
   const [length, setLength] = useState('');
   const [startSeconds, setStartSeconds] = useState(0);
+  // Weights are shown and typed in the unit chosen when the screen opened.
+  const [unit] = useState<WeightUnit>(() => currentUnits().weight);
   const [rows, setRows] = useState<EditExercise[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -129,7 +137,7 @@ export default function EditWorkout() {
                 .map((s) => ({
                   key: key(),
                   type: s.set_type,
-                  weight: show(s.weight_kg),
+                  weight: s.weight_kg == null ? '' : String(Math.round(fromKg(Number(s.weight_kg), unit) * 10) / 10),
                   reps: show(s.reps),
                   duration: show(s.duration_s, cardio(we.exercises.kind) ? 60 : 1),
                   distance: show(s.distance_m, cardio(we.exercises.kind) ? 1000 : 1),
@@ -138,7 +146,7 @@ export default function EditWorkout() {
         );
         setLoaded(true);
       });
-  }, [id]);
+  }, [id, unit]);
 
   // Exercises chosen in the picker modal join the end of the list.
   useFocusEffect(
@@ -179,7 +187,7 @@ export default function EditWorkout() {
           sets: e.sets
             .map((s) => ({
               set_type: s.type,
-              weight_kg: store(s.weight),
+              weight_kg: s.weight.trim() === '' ? null : weightKg(s.weight, unit),
               reps: store(s.reps),
               duration_s: store(s.duration, cardio(k) ? 60 : 1),
               distance_m: store(s.distance, cardio(k) ? 1000 : 1),
@@ -251,6 +259,7 @@ export default function EditWorkout() {
         renderItem={(e, { handle }) => (
           <ExerciseEditor
             ex={e}
+            unit={unit}
             handle={handle}
             onRemove={() => setRows((r) => r.filter((x) => x.key !== e.key))}
             onNotes={(notes) => patchEx(e.key, (x) => ({ ...x, notes }))}
@@ -278,6 +287,7 @@ export default function EditWorkout() {
 
 function ExerciseEditor({
   ex,
+  unit,
   handle,
   onRemove,
   onNotes,
@@ -286,6 +296,7 @@ function ExerciseEditor({
   onAddSet,
 }: {
   ex: EditExercise;
+  unit: WeightUnit;
   handle: React.ReactNode;
   onRemove: () => void;
   onNotes: (notes: string) => void;
@@ -298,12 +309,12 @@ function ExerciseEditor({
   const cols: { field: keyof EditSet; label: string }[] =
     kind === 'weight_reps'
       ? [
-          { field: 'weight', label: 'kg' },
+          { field: 'weight', label: unit },
           { field: 'reps', label: 'Reps' },
         ]
       : kind === 'bodyweight_reps'
         ? [
-            { field: 'weight', label: '+kg' },
+            { field: 'weight', label: `+${unit}` },
             { field: 'reps', label: 'Reps' },
           ]
         : kind === 'duration'

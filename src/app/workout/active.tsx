@@ -21,7 +21,8 @@ import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Fonts, hardShadow, Radius, Space } from '@/constants/theme';
 import { clock } from '@/lib/dates';
-import { formatVolume, MUSCLE_LABELS, type PreviousSet } from '@/lib/workouts';
+import { formatVolume, formatWeight, useUnits, weightNumber, type WeightUnit } from '@/lib/units';
+import { MUSCLE_LABELS, type PreviousSet } from '@/lib/workouts';
 import { refreshStreaks } from '@/lib/streak';
 import {
   completedSetCount,
@@ -77,6 +78,7 @@ export default function ActiveWorkoutScreen() {
   }
 
   const a = w.active;
+  const unit = a.unit ?? 'kg';
   const sets = completedSetCount(a);
 
   async function finish() {
@@ -132,7 +134,7 @@ export default function ActiveWorkoutScreen() {
         />
         <View style={styles.stats}>
           <StatPill label="Sets" value={String(sets)} />
-          <StatPill label="Volume" value={formatVolume(liveVolume(a))} />
+          <StatPill label="Volume" value={formatVolume(liveVolume(a), unit)} />
           <StatPill label="Exercises" value={String(a.exercises.length)} />
         </View>
         {error ? (
@@ -151,7 +153,9 @@ export default function ActiveWorkoutScreen() {
           gap={Space.lg}
           scrollRef={scrollRef}
           onReorder={w.reorderExercises}
-          renderItem={(ex, { handle }) => <ExerciseBlock ex={ex} handle={a.exercises.length > 1 ? handle : null} />}
+          renderItem={(ex, { handle }) => (
+            <ExerciseBlock ex={ex} unit={unit} handle={a.exercises.length > 1 ? handle : null} />
+          )}
         />
 
         <Button
@@ -308,12 +312,12 @@ function StatPill({ label, value }: { label: string; value: string }) {
   );
 }
 
-function columnsFor(kind: ExerciseKind) {
+function columnsFor(kind: ExerciseKind, unit: WeightUnit) {
   switch (kind) {
     case 'weight_reps':
-      return { a: { field: 'weight', label: 'kg' }, b: { field: 'reps', label: 'Reps' } } as const;
+      return { a: { field: 'weight', label: unit }, b: { field: 'reps', label: 'Reps' } } as const;
     case 'bodyweight_reps':
-      return { a: { field: 'weight', label: '+kg' }, b: { field: 'reps', label: 'Reps' } } as const;
+      return { a: { field: 'weight', label: `+${unit}` }, b: { field: 'reps', label: 'Reps' } } as const;
     case 'duration':
       return { a: null, b: { field: 'duration', label: 'Sec' } } as const;
     case 'distance_time':
@@ -321,13 +325,13 @@ function columnsFor(kind: ExerciseKind) {
   }
 }
 
-function previousText(kind: ExerciseKind, p?: PreviousSet) {
+function previousText(kind: ExerciseKind, unit: WeightUnit, p?: PreviousSet) {
   if (!p) return '–';
   switch (kind) {
     case 'weight_reps':
-      return p.weight_kg != null && p.reps != null ? `${Number(p.weight_kg)} × ${p.reps}` : '–';
+      return p.weight_kg != null && p.reps != null ? `${weightNumber(p.weight_kg, unit)} × ${p.reps}` : '–';
     case 'bodyweight_reps':
-      return p.reps != null ? `${p.weight_kg ? `+${Number(p.weight_kg)} × ` : ''}${p.reps}` : '–';
+      return p.reps != null ? `${p.weight_kg ? `+${weightNumber(p.weight_kg, unit)} × ` : ''}${p.reps}` : '–';
     case 'duration':
       return p.duration_s != null ? `${p.duration_s}s` : '–';
     case 'distance_time':
@@ -337,11 +341,11 @@ function previousText(kind: ExerciseKind, p?: PreviousSet) {
 
 const exerciseKey = (ex: ActiveExercise) => ex.key;
 
-function ExerciseBlock({ ex, handle }: { ex: ActiveExercise; handle: React.ReactNode }) {
+function ExerciseBlock({ ex, unit, handle }: { ex: ActiveExercise; unit: WeightUnit; handle: React.ReactNode }) {
   const c = useColors();
   const w = useWorkout();
   const router = useRouter();
-  const cols = columnsFor(ex.exercise.kind);
+  const cols = columnsFor(ex.exercise.kind, unit);
   const showHowTo = () => router.push({ pathname: '/exercise/[id]', params: { id: ex.exercise.id } });
 
   const [menu, setMenu] = useState(false);
@@ -421,10 +425,10 @@ function ExerciseBlock({ ex, handle }: { ex: ActiveExercise; handle: React.React
             key={s.key}
             set={s}
             label={s.setType === 'warmup' ? 'W' : s.setType === 'drop' ? 'D' : s.setType === 'failure' ? 'F' : String(workingNo)}
-            prev={previousText(ex.exercise.kind, ex.previous[i])}
+            prev={previousText(ex.exercise.kind, unit, ex.previous[i])}
             colA={cols.a?.field}
             colB={cols.b.field}
-            placeholder={(field) => placeholderFor(ex, i, field)}
+            placeholder={(field) => placeholderFor(ex, i, field, unit)}
             onChange={(patch) => w.updateSet(ex.key, s.key, patch)}
             onMenu={() => setSetMenuFor(s.key)}
             onRemove={() => w.removeSet(ex.key, s.key)}
@@ -564,6 +568,7 @@ function SetRow({
 
 function Results({ result, onDone }: { result: FinishWorkoutResult; onDone: () => void }) {
   const c = useColors();
+  const units = useUnits();
   const insets = useSafeAreaInsets();
   const prs = result.prs;
   return (
@@ -588,7 +593,7 @@ function Results({ result, onDone }: { result: FinishWorkoutResult; onDone: () =
           </AppText>
           <View style={styles.stats}>
             <StatPill label="Sets" value={String(result.total_sets)} />
-            <StatPill label="Volume" value={formatVolume(Number(result.total_volume))} />
+            <StatPill label="Volume" value={formatVolume(Number(result.total_volume), units.weight)} />
           </View>
           {prs.length > 0 ? (
             <Card style={{ gap: Space.md }}>
@@ -600,9 +605,9 @@ function Results({ result, onDone }: { result: FinishWorkoutResult; onDone: () =
                     {p.name}
                   </AppText>
                   <View style={{ alignItems: 'flex-end' }}>
-                    <AppText variant="bodyBold">{Number(p.e1rm)} kg</AppText>
+                    <AppText variant="bodyBold">{formatWeight(p.e1rm, units.weight)}</AppText>
                     <AppText variant="small" color="textMuted">
-                      was {Number(p.previous)} kg
+                      was {formatWeight(p.previous, units.weight)}
                     </AppText>
                   </View>
                 </Animated.View>

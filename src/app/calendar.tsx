@@ -17,7 +17,8 @@ import { addDays, firstOfMonth, formatDuration, fromDay, mondayOf, toDay } from 
 import { HABITS } from '@/lib/habits';
 import { supabase } from '@/lib/supabase';
 import { useQuery } from '@/lib/use-query';
-import { fetchWorkoutExercises, formatVolume } from '@/lib/workouts';
+import { formatVolume, formatWeight, useUnits } from '@/lib/units';
+import { fetchWorkoutExercises } from '@/lib/workouts';
 import { useSession } from '@/stores/session';
 import type { Meal } from '@/types/db';
 
@@ -60,6 +61,7 @@ export default function Calendar() {
   const c = useColors();
   const router = useRouter();
   const profile = useSession((s) => s.profile);
+  const units = useUnits();
   const today = toDay();
   const [day, setDay] = useState(today);
   const [month, setMonth] = useState(firstOfMonth(today));
@@ -222,7 +224,7 @@ export default function Calendar() {
                 Weigh-in
               </AppText>
               <AppText variant="bodyBold">
-                {Number(s.weight.weight_kg)} kg
+                {formatWeight(s.weight.weight_kg, units.weight)}
                 {s.weight.body_fat_pct ? `, ${Number(s.weight.body_fat_pct)}% fat` : ''}
               </AppText>
             </Card>
@@ -236,7 +238,10 @@ export default function Calendar() {
                 </AppText>
                 <AppText variant="small" color="textMuted">
                   {formatDuration(s.workouts.reduce((t, w) => t + w.duration_s, 0))},{' '}
-                  {formatVolume(s.workouts.reduce((t, w) => t + Number(w.total_volume), 0))}
+                  {formatVolume(
+                    s.workouts.reduce((t, w) => t + Number(w.total_volume), 0),
+                    units.weight
+                  )}
                 </AppText>
               </View>
               {s.workouts.map((w) => (

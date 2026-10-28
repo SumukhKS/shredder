@@ -18,13 +18,15 @@ import {
   chartSeries,
   formatMetric,
   METRIC_LABELS,
-  METRIC_UNITS,
+  metricInUnit,
+  metricUnit,
   metricsFor,
   type ExerciseSession,
   type Metric,
 } from '@/lib/history-stats';
 import { supabase } from '@/lib/supabase';
 import { useQuery } from '@/lib/use-query';
+import { useUnits } from '@/lib/units';
 import { describeSet, fetchExerciseHistory, MUSCLE_LABELS } from '@/lib/workouts';
 import type { Exercise } from '@/types/db';
 
@@ -42,6 +44,7 @@ export default function ExerciseDetail() {
     return { ex: ex.data as Exercise, history };
   }, id);
   const [picked, setPicked] = useState<Metric | null>(null);
+  const units = useUnits();
 
   if (error) {
     return (
@@ -83,7 +86,7 @@ export default function ExerciseDetail() {
                 <AppText variant="small" color="textMuted">
                   Best {METRIC_LABELS[b.metric].toLowerCase()}
                 </AppText>
-                <AppText variant="bodyBold">{formatMetric(b.metric, b.value)}</AppText>
+                <AppText variant="bodyBold">{formatMetric(b.metric, b.value, units.weight)}</AppText>
               </Card>
             ))}
             <Card style={styles.best}>
@@ -109,11 +112,11 @@ export default function ExerciseDetail() {
             {series.length ? (
               <>
                 <LineChart
-                  values={series.map((p) => p.value)}
+                  values={series.map((p) => Math.round(metricInUnit(metric, p.value, units.weight) * 10) / 10)}
                   labels={series.map((p) => shortDay(p.day))}
                   marks={series.map((p) => p.pr)}
                   color={c.primary}
-                  unit={METRIC_UNITS[metric].trim() ? METRIC_UNITS[metric] : ''}
+                  unit={metricUnit(metric, units.weight)}
                 />
                 <AppText variant="small" color="textMuted">
                   {series.length} session{series.length === 1 ? '' : 's'}. Filled dots mark sessions where you set a PR; touch
@@ -181,6 +184,7 @@ export default function ExerciseDetail() {
 const shortDay = (day: string) => fromDay(day).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
 function Session({ session, kind, onOpen }: { session: ExerciseSession; kind: Exercise['kind']; onOpen: () => void }) {
+  const units = useUnits();
   const c = useColors();
   const labels = setLabels(session.sets);
   return (
@@ -205,7 +209,7 @@ function Session({ session, kind, onOpen }: { session: ExerciseSession; kind: Ex
           <AppText variant="bodyBold" color="textMuted" style={{ width: 24 }}>
             {labels[i]}
           </AppText>
-          <AppText variant="body">{describeSet(kind, s)}</AppText>
+          <AppText variant="body">{describeSet(kind, s, units.weight)}</AppText>
           {s.is_pr ? <PrBadge size={20} /> : null}
         </View>
       ))}
