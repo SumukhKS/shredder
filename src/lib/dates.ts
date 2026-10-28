@@ -24,14 +24,15 @@ export function dayLabel(day: string): string {
   return fromDay(day).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
+/** A workout's length to the second: "1h 05m 12s", "45m 03s", "38s". */
 export function formatDuration(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0 && sec === 0) return `${m}m`;
-  return `${m}:${String(sec).padStart(2, '0')}`;
+  const sec = String(s % 60).padStart(2, '0');
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m ${sec}s`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${s}s`;
 }
 
 export function clock(totalSeconds: number): string {

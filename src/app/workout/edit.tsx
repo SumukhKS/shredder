@@ -15,7 +15,7 @@ import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { WeekCalendar } from '@/components/week-calendar';
 import { Fonts, Radius, Space } from '@/constants/theme';
-import { fromDay, toDay } from '@/lib/dates';
+import { clock, fromDay, toDay } from '@/lib/dates';
 import { supabase } from '@/lib/supabase';
 import { usePicker } from '@/stores/picker';
 import type { Exercise, ExerciseKind, SetType } from '@/types/db';
@@ -71,6 +71,16 @@ const store = (v: string, mult = 1) => {
 };
 const pad = (x: number) => String(x).padStart(2, '0');
 
+/** Seconds in "1:05:30", "45:10" or "60" (a bare number is minutes); null when it can't be read. */
+function parseLength(text: string): number | null {
+  const parts = text.trim().split(/[:.]/);
+  if (!parts.length || parts.length > 3 || parts.some((p) => !/^\d+$/.test(p))) return null;
+  const n = parts.map(Number);
+  if (n.length === 1) return n[0] * 60;
+  if (n.slice(1).some((x) => x > 59)) return null;
+  return n.length === 2 ? n[0] * 60 + n[1] : n[0] * 3600 + n[1] * 60 + n[2];
+}
+
 /** Fix a workout after it was logged: name, date, start time, length, exercises and every set. */
 export default function EditWorkout() {
   const c = useColors();
@@ -83,7 +93,9 @@ export default function EditWorkout() {
   const [name, setName] = useState('');
   const [day, setDay] = useState(toDay());
   const [start, setStart] = useState('');
-  const [minutes, setMinutes] = useState('');
+  // Length as h:mm:ss or m:ss (a plain number is minutes), and the start's seconds, so saving keeps it exact.
+  const [length, setLength] = useState('');
+  const [startSeconds, setStartSeconds] = useState(0);
   const [rows, setRows] = useState<EditExercise[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +115,8 @@ export default function EditWorkout() {
         setName(w.name);
         setDay(w.day);
         setStart(`${pad(begin.getHours())}:${pad(begin.getMinutes())}`);
-        setMinutes(String(Math.max(1, Math.round((new Date(w.finished_at).getTime() - begin.getTime()) / 60000))));
+        setStartSeconds(begin.getSeconds());
+        setLength(clock(Math.max(1, Math.round((new Date(w.finished_at).getTime() - begin.getTime()) / 1000))));
         setRows(
           [...w.workout_exercises]
             .sort((a, b) => a.position - b.position)
@@ -153,9 +166,10 @@ export default function EditWorkout() {
 
   async function save() {
     const m = /^(\d{1,2})[:.](\d{2})$/.exec(start.trim());
-    const mins = Number(minutes);
+    const secs = parseLength(length);
     if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return setError('Enter the start time as HH:MM, e.g. 07:30.');
-    if (!Number.isFinite(mins) || mins < 1 || mins > 24 * 60) return setError('Enter how long the workout lasted, in minutes.');
+    if (secs == null || secs < 1 || secs > 24 * 3600)
+      return setError('Enter how long the workout lasted as h:mm:ss or m:ss, e.g. 1:05:30 or 45:10.');
     const exercises = rows
       .map((e) => {
         const k = e.exercise.kind;
@@ -177,8 +191,8 @@ export default function EditWorkout() {
     if (!exercises.length) return setError('Keep at least one exercise with a filled-in set.');
 
     const begin = fromDay(day);
-    begin.setHours(Number(m[1]), Number(m[2]), 0, 0);
-    const end = new Date(begin.getTime() + mins * 60000);
+    begin.setHours(Number(m[1]), Number(m[2]), startSeconds, 0);
+    const end = new Date(begin.getTime() + secs * 1000);
     setSaving(true);
     setError(null);
     const { error: e } = await supabase.rpc('update_workout', {
@@ -215,7 +229,14 @@ export default function EditWorkout() {
           <Field label="Start time" value={start} onChangeText={setStart} placeholder="07:30" keyboardType="numbers-and-punctuation" />
         </View>
         <View style={{ flex: 1 }}>
-          <Field label="Length" value={minutes} onChangeText={setMinutes} placeholder="60" keyboardType="number-pad" suffix="min" />
+          <Field
+            label="Length"
+            value={length}
+            onChangeText={setLength}
+            placeholder="1:00:00"
+            keyboardType="numbers-and-punctuation"
+            hint="h:mm:ss"
+          />
         </View>
       </View>
 
