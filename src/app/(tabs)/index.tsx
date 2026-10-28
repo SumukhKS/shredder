@@ -1,10 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { BackHandler, Pressable, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { FadeIn, useAnimatedRef, useSharedValue } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  FadeIn,
+  useAnimatedRef,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { Sortable } from '@/components/sortable';
 import { StreakCard } from '@/components/streak-card';
@@ -332,19 +343,21 @@ export default function Today() {
           // Cards only move after "Customize layout" is tapped, so a long press on a card can't rearrange it by mistake.
           enabled={editing}
           onReorder={(keys) => setOrder(keys as CardId[])}
-          renderItem={(p) => (
-            <View>
-              <View pointerEvents={editing ? 'none' : 'auto'}>{render(p)}</View>
-              {editing ? (
+          renderItem={(p) =>
+            editing ? (
+              <Floating phase={shown.indexOf(p)}>
+                <View pointerEvents="none">{render(p)}</View>
                 <EditControls
                   name={CARD_NAMES[p.id]}
                   size={p.size}
                   onHide={() => toggle(p.id)}
                   onResize={(s) => setSize(p.id, s)}
                 />
-              ) : null}
-            </View>
-          )}
+              </Floating>
+            ) : (
+              render(p)
+            )
+          }
         />
       </Animated.View>
 
@@ -411,6 +424,40 @@ function resized(from: CardSize, dx: number, dy: number): CardSize {
   return wide ? 'medium' : 'small';
 }
 
+/**
+ * While the layout is being edited, each card lifts off the page and bobs gently, out of step
+ * with its neighbours, so it's clear the cards can be moved.
+ */
+function Floating({ phase, children }: { phase: number; children: React.ReactNode }) {
+  const c = useColors();
+  const lift = useSharedValue(0);
+  const bob = useSharedValue(0);
+  useEffect(() => {
+    lift.set(withSpring(1, { damping: 14, stiffness: 180 }));
+    bob.set(
+      withDelay(
+        (phase % 4) * 220,
+        withRepeat(
+          withSequence(
+            withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.sin) }),
+            withTiming(0, { duration: 1100, easing: Easing.inOut(Easing.sin) })
+          ),
+          -1
+        )
+      )
+    );
+  }, [lift, bob, phase]);
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateY: -4 * lift.get() - 3 * bob.get() }, { scale: 1 + 0.015 * lift.get() }],
+  }));
+  // A shadow alone vanishes on black, so the lifted card casts a soft orange glow instead.
+  return (
+    <Animated.View style={[styles.floating, { boxShadow: `0px 12px 26px 0px ${withAlpha(c.primary, 0.28)}` }, style]}>
+      {children}
+    </Animated.View>
+  );
+}
+
 /** Hide button and resize corner drawn over a card while the layout is being edited. */
 function EditControls({
   name,
@@ -448,7 +495,6 @@ function EditControls({
 
   return (
     <>
-      <View pointerEvents="none" style={[styles.outline, { borderColor: withAlpha(c.primary, 0.7) }]} />
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Hide ${name}`}
@@ -611,7 +657,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
   hidden: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm },
-  outline: { ...StyleSheet.absoluteFill, borderRadius: Radius.card, borderWidth: 2, borderStyle: 'dashed' },
+  floating: { borderRadius: Radius.card },
   hide: {
     position: 'absolute',
     top: -8,
