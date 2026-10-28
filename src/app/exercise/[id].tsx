@@ -11,7 +11,7 @@ import { Segmented } from '@/components/ui/chips';
 import { Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
-import { Space } from '@/constants/theme';
+import { Radius, Space } from '@/constants/theme';
 import { dayLabel, fromDay } from '@/lib/dates';
 import {
   allTimeBests,
@@ -21,6 +21,7 @@ import {
   metricInUnit,
   metricUnit,
   metricsFor,
+  sessionValue,
   type ExerciseSession,
   type Metric,
 } from '@/lib/history-stats';
@@ -35,14 +36,18 @@ export default function ExerciseDetail() {
   const c = useColors();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data, error } = useQuery(async () => {
-    const [ex, history] = await Promise.all([
-      supabase.from('exercises').select('*').eq('id', id).single(),
-      fetchExerciseHistory(id),
-    ]);
-    if (ex.error) throw ex.error;
-    return { ex: ex.data as Exercise, history };
-  }, id);
+  const { data, error } = useQuery(
+    async () => {
+      const [ex, history] = await Promise.all([
+        supabase.from('exercises').select('*').eq('id', id).single(),
+        fetchExerciseHistory(id),
+      ]);
+      if (ex.error) throw ex.error;
+      return { ex: ex.data as Exercise, history };
+    },
+    id,
+    { cache: 'exercise' }
+  );
   const [picked, setPicked] = useState<Metric | null>(null);
   const units = useUnits();
 
@@ -119,8 +124,8 @@ export default function ExerciseDetail() {
                   unit={metricUnit(metric, units.weight)}
                 />
                 <AppText variant="small" color="textMuted">
-                  {series.length} session{series.length === 1 ? '' : 's'}. Filled dots mark sessions where you set a PR; touch
-                  the chart to read any session.
+                  {series.length} session{series.length === 1 ? '' : 's'}. Filled dots mark sessions where you set a PR; touch the
+                  chart to read any session.
                 </AppText>
               </>
             ) : (
@@ -129,6 +134,12 @@ export default function ExerciseDetail() {
               </AppText>
             )}
           </Card>
+
+          <Records
+            kind={ex.kind}
+            history={history}
+            onOpen={(workoutId) => router.push({ pathname: '/workout/[id]', params: { id: workoutId } })}
+          />
 
           <SectionHeader title="History" />
           {history.map((s) => (
@@ -178,6 +189,83 @@ export default function ExerciseDetail() {
         </AppText>
       ) : null}
     </Screen>
+  );
+}
+
+/** Every set that was a personal record when it was done, newest first, with its estimated 1RM. */
+function Records({
+  kind,
+  history,
+  onOpen,
+}: {
+  kind: Exercise['kind'];
+  history: ExerciseSession[];
+  onOpen: (workoutId: string) => void;
+}) {
+  const c = useColors();
+  const units = useUnits();
+  const [all, setAll] = useState(false);
+  const records = history.flatMap((s) => s.sets.filter((x) => x.is_pr).map((set) => ({ set, session: s })));
+  const shown = all ? records : records.slice(0, 5);
+  return (
+    <Card style={{ gap: Space.sm }}>
+      <View style={styles.inline}>
+        <PrBadge size={22} />
+        <AppText variant="h3" style={{ flex: 1 }}>
+          Personal records
+        </AppText>
+        <AppText variant="smallBold" color="textMuted">
+          {records.length}
+        </AppText>
+      </View>
+      {records.length ? (
+        shown.map(({ set, session }, i) => {
+          const rm = kind === 'weight_reps' ? sessionValue('e1rm', [set]) : null;
+          return (
+            <Pressable
+              key={`${session.workoutId}-${i}`}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${session.workoutName}`}
+              onPress={() => onOpen(session.workoutId)}
+              style={({ pressed }) => [
+                styles.record,
+                { borderColor: c.hairline },
+                i === 0 && { backgroundColor: c.surfaceHi },
+                pressed && { opacity: 0.6 },
+              ]}>
+              <View style={{ flex: 1 }}>
+                <AppText variant="bodyBold">{describeSet(kind, set, units.weight)}</AppText>
+                <AppText variant="small" color="textMuted">
+                  {dayLabel(session.day)}
+                  {i === 0 ? ', latest' : ''}
+                </AppText>
+              </View>
+              {rm ? (
+                <View style={{ alignItems: 'flex-end' }}>
+                  <AppText variant="bodyBold" color="primary">
+                    {formatMetric('e1rm', rm, units.weight)}
+                  </AppText>
+                  <AppText variant="small" color="textMuted">
+                    est. 1RM
+                  </AppText>
+                </View>
+              ) : null}
+            </Pressable>
+          );
+        })
+      ) : (
+        <AppText variant="small" color="textMuted">
+          No PRs yet. Your first session is the baseline; beat it on weight or reps to set one.
+        </AppText>
+      )}
+      {records.length > 5 ? (
+        <Pressable accessibilityRole="button" onPress={() => setAll(!all)} hitSlop={8}>
+          <AppText variant="smallBold" color="primary" align="center">
+            {all ? 'Show fewer' : `Show all ${records.length}`}
+          </AppText>
+        </Pressable>
+      ) : null}
+    </Card>
   );
 }
 
@@ -234,6 +322,15 @@ const styles = StyleSheet.create({
   bests: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm },
   best: { flexGrow: 1, flexBasis: '30%', padding: Space.md, gap: 2 },
   inline: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
+  record: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+    paddingVertical: Space.sm,
+    paddingHorizontal: Space.md,
+    borderRadius: Radius.row,
+    borderWidth: 1,
+  },
   demo: { width: '100%', maxWidth: 420, alignSelf: 'center', aspectRatio: 1 },
   step: { flexDirection: 'row', gap: Space.md, alignItems: 'flex-start' },
   num: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },

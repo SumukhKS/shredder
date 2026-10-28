@@ -7,12 +7,11 @@ import { captureRef } from 'react-native-view-shot';
 import { BarChart, LineChart } from '@/components/charts';
 import { MuscleMap } from '@/components/muscle-map';
 import { NumberSheet } from '@/components/number-sheet';
-import { PrBadge } from '@/components/pr-badge';
 import { ProfileCard } from '@/components/profile-card';
 import { Button, IconButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Segmented } from '@/components/ui/chips';
-import { EmptyState, Screen, SectionHeader } from '@/components/ui/screen';
+import { Screen, SectionHeader } from '@/components/ui/screen';
 import { ProgressBar } from '@/components/ui/progress';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
@@ -31,22 +30,16 @@ interface ProfileData {
   dash: Awaited<ReturnType<typeof fetchDashboard>>;
   metrics: BodyMetric[];
   weeks: { week: string; volume: number }[];
-  prs: { best_e1rm: number; best_weight: number; reps: number; exercises: { name: string } }[];
   bestWeekStreak: number;
 }
 
 async function load(stepsTarget: number): Promise<ProfileData> {
   const since = mondayOf(addDays(toDay(), -7 * 7));
-  const [totals, dash, metrics, v, p, weeks] = await Promise.all([
+  const [totals, dash, metrics, v, weeks] = await Promise.all([
     fetchProfileTotals(stepsTarget),
     fetchDashboard(),
     fetchBodyMetrics(120),
     supabase.from('weekly_volume').select('week, volume').gte('week', since).order('week'),
-    supabase
-      .from('personal_records')
-      .select('best_e1rm, best_weight, reps, exercises(name)')
-      .order('best_e1rm', { ascending: false })
-      .limit(8),
     fetchWorkoutWeeks(),
   ]);
   return {
@@ -54,7 +47,6 @@ async function load(stepsTarget: number): Promise<ProfileData> {
     dash,
     metrics,
     weeks: (v.data ?? []) as ProfileData['weeks'],
-    prs: (p.data ?? []) as unknown as ProfileData['prs'],
     bestWeekStreak: weekStreaks(weeks).best,
   };
 }
@@ -67,7 +59,7 @@ export default function ProfileTab() {
   const units = useUnits();
   const u = units.weight;
   const stepsTarget = profile?.steps_target ?? 0;
-  const q = useQuery(() => load(stepsTarget), String(stepsTarget));
+  const q = useQuery(() => load(stepsTarget), String(stepsTarget), { cache: 'profile' });
   const shareRef = useRef<React.ComponentRef<typeof View>>(null);
   const [sharing, setSharing] = useState(false);
   const [logging, setLogging] = useState(false);
@@ -284,34 +276,6 @@ export default function ProfileTab() {
         <AppText variant="bodyBold">{formatVolume(weekVolumes[weekVolumes.length - 1], u)} this week</AppText>
         <BarChart values={weekVolumes.map((v) => weightNumber(v, u))} labels={weekLabels} color={c.accent} />
       </Card>
-
-      <SectionHeader title="Personal records" />
-      {d && d.prs.length === 0 ? (
-        <EmptyState
-          title="No records yet"
-          body="Your best estimated one-rep max for each lift appears here after your first workout."
-        />
-      ) : (
-        <Card tone="flat" style={{ gap: Space.md }}>
-          {d?.prs.map((p) => (
-            <View key={p.exercises.name} style={styles.row}>
-              <PrBadge size={26} />
-              <View style={{ flex: 1 }}>
-                <AppText variant="bodyBold">{p.exercises.name}</AppText>
-                <AppText variant="small" color="textMuted">
-                  {formatWeight(p.best_weight, u)} × {p.reps}
-                </AppText>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <AppText variant="h3">{formatWeight(p.best_e1rm, u)}</AppText>
-                <AppText variant="small" color="textMuted">
-                  est. 1RM
-                </AppText>
-              </View>
-            </View>
-          ))}
-        </Card>
-      )}
 
       <NumberSheet
         visible={logging}
