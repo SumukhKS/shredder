@@ -221,6 +221,17 @@ export async function syncHealth(userId: string, to: string, days = 7): Promise<
 }
 
 let backfilled = false;
+let lastSync = 0;
+
+/**
+ * `syncHealth` for the past week, at most once every 15 minutes (reading Health Connect wakes
+ * another app's process, so doing it on every screen visit costs battery). `force` skips the wait.
+ */
+export async function syncHealthThrottled(userId: string, today: string, force = false): Promise<boolean> {
+  if (!force && Date.now() - lastSync < 15 * 60_000) return false;
+  lastSync = Date.now();
+  return syncHealth(userId, today);
+}
 
 /** Once per app session, pull the past year (as far back as Health Connect allows). */
 export async function backfillHealth(userId: string, today: string): Promise<boolean> {

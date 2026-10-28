@@ -20,7 +20,7 @@ import { Gradients, Radius, Space, withAlpha } from '@/constants/theme';
 import { fetchDay, fetchHabitHistory, type Habit } from '@/lib/daily';
 import { greeting, toDay } from '@/lib/dates';
 import { HABITS } from '@/lib/habits';
-import { backfillHealth, syncHealth } from '@/lib/health';
+import { backfillHealth, syncHealthThrottled } from '@/lib/health';
 import { dayStreak, fetchWorkoutWeeks, weekStreaks } from '@/lib/streak';
 import { useQuery } from '@/lib/use-query';
 import { fetchWorkoutExercises } from '@/lib/workouts';
@@ -75,12 +75,12 @@ export default function Today() {
   const weeks = useQuery(fetchWorkoutWeeks);
   const userId = session?.user.id;
 
-  // Pull the last week of steps and sleep whenever the screen comes back into view, and the
-  // whole past year the first time each session.
+  // Pull the last week of steps and sleep when the screen comes back into view (at most every
+  // 15 minutes), and the whole past year the first time each session.
   useFocusEffect(
     useCallback(() => {
       if (!userId) return;
-      syncHealth(userId, today)
+      syncHealthThrottled(userId, today)
         .then((synced) => (synced ? backfillHealth(userId, today).then(() => true) : false))
         .then((synced) => {
           if (synced) {
@@ -296,7 +296,7 @@ export default function Today() {
         day.refresh();
         week.reload();
         weeks.reload();
-        syncHealth(session.user.id, today).then((ok) => {
+        syncHealthThrottled(session.user.id, today, true).then((ok) => {
           if (ok) day.reload();
         });
       }}>

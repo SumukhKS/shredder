@@ -9,9 +9,6 @@ import Animated, {
   FadeIn,
   useAnimatedStyle,
   useSharedValue,
-  withDelay,
-  withRepeat,
-  withSequence,
   withTiming,
 } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
@@ -146,12 +143,9 @@ function Figure({ parts, viewBox, aspect, loads, label }: FigureView & { loads: 
   const c = useColors();
   const glow = useSharedValue(0);
 
-  // Light up, then keep a slow breathing pulse so the worked muscles read as alive.
+  // Light up once. (A never-ending pulse here kept the screen redrawing and drained the battery.)
   useEffect(() => {
-    glow.value = withSequence(
-      withTiming(1, { duration: 700, easing: Easing.out(Easing.cubic) }),
-      withDelay(200, withRepeat(withTiming(0.72, { duration: 1400, easing: Easing.inOut(Easing.sin) }), -1, true))
-    );
+    glow.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.cubic) });
   }, [glow]);
   const litStyle = useAnimatedStyle(() => ({ opacity: glow.value }));
 

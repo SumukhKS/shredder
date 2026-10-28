@@ -55,30 +55,12 @@ export default function ActiveWorkoutScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const w = useWorkout();
-  const [now, setNow] = useState(() => Date.now());
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<FinishWorkoutResult | null>(null);
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
-
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  // Rest timer completion
-  const rest = w.rest;
-  const restLeft = rest ? Math.ceil((rest.endsAt - now) / 1000) : 0;
-  const firedRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (rest && restLeft <= 0 && firedRef.current !== rest.endsAt) {
-      firedRef.current = rest.endsAt;
-      if (!isWeb) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      w.skipRest();
-    }
-  }, [rest, restLeft, w]);
 
   if (result) return <Results result={result} onDone={() => router.back()} />;
 
@@ -95,7 +77,6 @@ export default function ActiveWorkoutScreen() {
   }
 
   const a = w.active;
-  const elapsed = (now - new Date(a.startedAt).getTime()) / 1000;
   const sets = completedSetCount(a);
 
   async function finish() {
@@ -119,9 +100,7 @@ export default function ActiveWorkoutScreen() {
       <View style={[styles.top, { paddingTop: insets.top + Space.sm, borderColor: c.hairline }]}>
         <IconButton icon="chevron-down" label="Minimise workout" onPress={() => router.back()} />
         <View style={{ flex: 1, alignItems: 'center' }}>
-          <AppText variant="stat" style={{ fontSize: 22 }}>
-            {clock(elapsed)}
-          </AppText>
+          <ElapsedClock startedAt={a.startedAt} />
         </View>
         <Button
           label="Finish"
@@ -247,29 +226,73 @@ export default function ActiveWorkoutScreen() {
         onSave={w.rename}
       />
 
-      {rest && restLeft > 0 ? (
-        <View
-          style={[
-            styles.rest,
-            { backgroundColor: c.surface, borderColor: c.border, bottom: insets.bottom + Space.lg },
-            hardShadow(c.shadow, 4),
-          ]}>
-          <View style={styles.row}>
-            <View style={{ flex: 1 }}>
-              <AppText variant="small" color="textMuted" numberOfLines={1}>
-                Rest after {rest.exerciseName}
-              </AppText>
-              <AppText variant="h1">{clock(restLeft)}</AppText>
-            </View>
-            <Button label="-15s" size="sm" variant="secondary" onPress={() => w.adjustRest(-15)} />
-            <Button label="+15s" size="sm" variant="secondary" onPress={() => w.adjustRest(15)} />
-            <Button label="Skip" size="sm" onPress={w.skipRest} />
-          </View>
-          <ProgressBar value={restLeft / Math.max(1, rest.duration)} color={c.primary} height={8} />
-        </View>
-      ) : null}
+      <RestTimer />
       <PrCelebrationHost />
     </KeyboardAvoidingView>
+  );
+}
+
+/** Ticks once a second. Kept to its own component so only the clock redraws, not the whole workout. */
+function useNow() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return now;
+}
+
+function ElapsedClock({ startedAt }: { startedAt: string }) {
+  const now = useNow();
+  return (
+    <AppText variant="stat" style={{ fontSize: 22 }}>
+      {clock((now - new Date(startedAt).getTime()) / 1000)}
+    </AppText>
+  );
+}
+
+/** The rest countdown along the bottom; only mounted (and ticking) while a rest is running. */
+function RestTimer() {
+  const rest = useWorkout((s) => s.rest);
+  return rest ? <RestCountdown rest={rest} /> : null;
+}
+
+function RestCountdown({ rest }: { rest: NonNullable<ReturnType<typeof useWorkout.getState>['rest']> }) {
+  const c = useColors();
+  const insets = useSafeAreaInsets();
+  const { adjustRest, skipRest } = useWorkout();
+  const now = useNow();
+  const restLeft = Math.ceil((rest.endsAt - now) / 1000);
+  const firedRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (restLeft <= 0 && firedRef.current !== rest.endsAt) {
+      firedRef.current = rest.endsAt;
+      if (!isWeb) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      skipRest();
+    }
+  }, [rest, restLeft, skipRest]);
+
+  if (restLeft <= 0) return null;
+  return (
+    <View
+      style={[
+        styles.rest,
+        { backgroundColor: c.surface, borderColor: c.border, bottom: insets.bottom + Space.lg },
+        hardShadow(c.shadow, 4),
+      ]}>
+      <View style={styles.row}>
+        <View style={{ flex: 1 }}>
+          <AppText variant="small" color="textMuted" numberOfLines={1}>
+            Rest after {rest.exerciseName}
+          </AppText>
+          <AppText variant="h1">{clock(restLeft)}</AppText>
+        </View>
+        <Button label="-15s" size="sm" variant="secondary" onPress={() => adjustRest(-15)} />
+        <Button label="+15s" size="sm" variant="secondary" onPress={() => adjustRest(15)} />
+        <Button label="Skip" size="sm" onPress={skipRest} />
+      </View>
+      <ProgressBar value={restLeft / Math.max(1, rest.duration)} color={c.primary} height={8} />
+    </View>
   );
 }
 

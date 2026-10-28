@@ -14,6 +14,18 @@ interface SessionState {
   signOut: () => Promise<void>;
 }
 
+// The last profile seen, kept on the device so the app opens without waiting for the network.
+const PROFILE_KEY = 'shredder.profile';
+
+function cachedProfile(userId: string): Profile | null {
+  try {
+    const p = JSON.parse(localStorage.getItem(PROFILE_KEY) ?? 'null') as Profile | null;
+    return p?.id === userId ? p : null;
+  } catch {
+    return null;
+  }
+}
+
 export const useSession = create<SessionState>((set, get) => ({
   session: null,
   profile: null,
@@ -22,6 +34,13 @@ export const useSession = create<SessionState>((set, get) => ({
   init: () => {
     supabase.auth.getSession().then(async ({ data }) => {
       set({ session: data.session });
+      const cached = data.session ? cachedProfile(data.session.user.id) : null;
+      if (cached) {
+        // Show the app straight away and bring the profile up to date behind it.
+        set({ profile: cached, ready: true });
+        get().refreshProfile();
+        return;
+      }
       if (data.session) await get().refreshProfile();
       set({ ready: true });
     });
@@ -29,7 +48,10 @@ export const useSession = create<SessionState>((set, get) => ({
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       const prev = get().session;
       set({ session });
-      if (!session) set({ profile: null });
+      if (!session) {
+        set({ profile: null });
+        localStorage.removeItem(PROFILE_KEY);
+      }
       else if (session.user.id !== prev?.user.id) {
         // Defer: Supabase recommends not awaiting other client calls inside this callback.
         setTimeout(() => get().refreshProfile(), 0);
@@ -44,6 +66,7 @@ export const useSession = create<SessionState>((set, get) => ({
     const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
     if (error) return null;
     set({ profile: data as Profile });
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(data));
     return data as Profile;
   },
 
@@ -56,10 +79,12 @@ export const useSession = create<SessionState>((set, get) => ({
     const { data, error } = await supabase.from('profiles').update(writable).eq('id', userId).select('*').single();
     if (error) throw error;
     set({ profile: data as Profile });
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(data));
   },
 
   signOut: async () => {
     await supabase.auth.signOut();
     set({ session: null, profile: null });
+    localStorage.removeItem(PROFILE_KEY);
   },
 }));
