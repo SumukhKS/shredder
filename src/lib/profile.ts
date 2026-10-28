@@ -13,7 +13,7 @@ export async function uploadAvatar(userId: string, uri: string, mimeType = 'imag
   const ext = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
   const path = `${userId}/${Date.now()}.${ext}`;
   const body = await new File(uri).arrayBuffer();
-  const { error } = await supabase.storage.from('avatars').upload(path, body, { contentType: mimeType, upsert: true });
+  const { error } = await supabase.storage.from('avatars').upload(path, body, { contentType: mimeType });
   if (error) throw error;
   // Older pictures are no longer used.
   const { data: old } = await supabase.storage.from('avatars').list(userId);

@@ -56,7 +56,7 @@ export default function EditProfile() {
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.7,
+      quality: 0.5,
     });
     if (r.canceled || !r.assets[0]) return;
     setUploading(true);
