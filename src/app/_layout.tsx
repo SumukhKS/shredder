@@ -10,7 +10,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useColors, useIsDark } from '@/components/ui/theme';
 import { UpdateBanner } from '@/components/update-banner';
 import { Fonts } from '@/constants/theme';
+import { autoMergeExercises } from '@/lib/auto-merge';
 import { useSession } from '@/stores/session';
+import { useWorkout } from '@/stores/workout';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -34,6 +36,15 @@ export default function RootLayout() {
   useEffect(() => {
     if (appReady) SplashScreen.hideAsync();
   }, [appReady]);
+
+  // Once a day, fold custom exercises that are certainly library ones into the library. Not while a
+  // workout is running, since it holds the custom exercise's id until it's saved.
+  const userId = session?.user.id;
+  const onboardedNow = !!profile?.onboarded;
+  useEffect(() => {
+    if (!userId || !onboardedNow || useWorkout.getState().active) return;
+    autoMergeExercises(userId).catch(() => {});
+  }, [userId, onboardedNow]);
 
   if (!appReady) return null;
 
