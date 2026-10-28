@@ -90,6 +90,7 @@ export default function RootLayout() {
             <Stack.Screen name="workout/edit" options={{ title: 'Edit workout', headerTransparent: false }} />
             <Stack.Screen name="habit/[kind]" options={{ title: '', headerTransparent: false }} />
             <Stack.Screen name="streaks" options={{ title: 'Streaks', headerTransparent: false }} />
+            <Stack.Screen name="calendar" options={{ title: 'Calendar', headerTransparent: false }} />
             <Stack.Screen
               name="workout/exercises"
               options={{ presentation: 'modal', title: 'Add exercises', headerTransparent: false }}
