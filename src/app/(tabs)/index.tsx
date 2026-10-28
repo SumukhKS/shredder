@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { BackHandler, Pressable, StyleSheet, View } from 'react-native';
@@ -27,7 +26,7 @@ import { ProgressBar, Ring } from '@/components/ui/progress';
 import { Screen } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
-import { Gradients, Radius, Space, withAlpha } from '@/constants/theme';
+import { Radius, Space, withAlpha } from '@/constants/theme';
 import { fetchDay, fetchHabitHistory, type Habit } from '@/lib/daily';
 import { greeting, toDay } from '@/lib/dates';
 import { HABITS } from '@/lib/habits';
@@ -634,7 +633,7 @@ function HabitCard({
   );
 }
 
-/** Seven slim bars: today's glows, goal days are lit, the rest dim. */
+/** Seven slim bars: today's in orange, goal days lit, the rest dim. */
 function MiniBars({ values, target }: { values: number[]; target: number }) {
   const c = useColors();
   const max = Math.max(target, ...values, 1);
@@ -643,11 +642,8 @@ function MiniBars({ values, target }: { values: number[]; target: number }) {
       {values.map((v, i) => {
         const h = Math.max(4, (v / max) * 40);
         const last = i === values.length - 1;
-        return last ? (
-          <LinearGradient key={i} colors={Gradients.blaze} style={[styles.bar, { height: h }]} />
-        ) : (
-          <View key={i} style={[styles.bar, { height: h, backgroundColor: target && v >= target ? c.accent : c.border }]} />
-        );
+        const color = last ? c.primary : target && v >= target ? withAlpha(c.primary, 0.55) : c.border;
+        return <View key={i} style={[styles.bar, { height: h, backgroundColor: color }]} />;
       })}
     </View>
   );

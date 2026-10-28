@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, View } from 'react-native';
 
-import { glow, Gradients, Radius, Space } from '@/constants/theme';
+import { Radius, Space } from '@/constants/theme';
 import { dayStreak } from '@/lib/streak';
 import type { Profile } from '@/types/db';
 
@@ -62,13 +61,9 @@ function Streak({
   return (
     <View style={{ flex: 1, gap: Space.sm }}>
       {lit ? (
-        <LinearGradient
-          colors={Gradients.blaze}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.badge, glow(c.glow, 18)]}>
+        <View style={[styles.badge, { backgroundColor: c.primary }]}>
           <Ionicons name={icon} size={18} color={c.onPrimary} />
-        </LinearGradient>
+        </View>
       ) : (
         <View style={[styles.badge, { backgroundColor: c.primarySoft }]}>
           <Ionicons name={icon} size={18} color={c.textMuted} />

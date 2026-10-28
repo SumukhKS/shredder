@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { Gradients, hardShadow, Radius, Space } from '@/constants/theme';
+import { hardShadow, Radius, Space } from '@/constants/theme';
 
 import { AppText } from './text';
 import { useColors } from './theme';
@@ -24,7 +23,7 @@ export interface ButtonProps {
 
 /**
  * Chunky button that physically "presses into" its hard shadow. Primary buttons
- * are a blaze gradient, secondary ones raised dark surfaces.
+ * are solid orange, secondary ones raised dark surfaces.
  */
 export function Button({
   label,
@@ -49,7 +48,6 @@ export function Button({
   const height = size === 'lg' ? 58 : size === 'sm' ? 38 : 50;
   const offset = size === 'sm' ? 2 : 4;
   const inactive = disabled || loading;
-  const face = variant === 'primary' ? Gradients.blaze : variant === 'secondary' ? Gradients.sheen : null;
 
   return (
     <Pressable
@@ -74,15 +72,6 @@ export function Button({
         p.shadow && pressed ? { transform: [{ translateX: offset }, { translateY: offset }] } : null,
         style,
       ]}>
-      {face ? (
-        <LinearGradient
-          pointerEvents="none"
-          colors={face}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[StyleSheet.absoluteFill, { borderRadius: Radius.row - 2 }]}
-        />
-      ) : null}
       {loading ? (
         <ActivityIndicator color={p.fg} />
       ) : (

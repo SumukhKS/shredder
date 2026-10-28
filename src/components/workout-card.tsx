@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Gradients, Radius, Space, withAlpha } from '@/constants/theme';
+import { Radius, Space, withAlpha } from '@/constants/theme';
 import { dayLabel, formatDuration } from '@/lib/dates';
 import { describeSet, formatVolume, summarizeSets, type ExerciseLog } from '@/lib/workouts';
 import type { WorkoutSummary } from '@/types/db';
@@ -147,7 +146,7 @@ export function WorkoutHeader({
     { icon: 'stopwatch', text: formatDuration(workout.duration_s) },
   ];
   return (
-    <LinearGradient colors={Gradients.blaze} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.band}>
+    <View style={[styles.band, { backgroundColor: c.primary }]}>
       <View style={styles.row}>
         <AppText variant="h2" color="onPrimary" numberOfLines={2} style={{ flex: 1 }}>
           {workout.name}
@@ -167,7 +166,7 @@ export function WorkoutHeader({
           </View>
         ))}
       </View>
-    </LinearGradient>
+    </View>
   );
 }
 

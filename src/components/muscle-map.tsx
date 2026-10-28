@@ -38,9 +38,9 @@ const FIGURES: Record<'male' | 'female', { front: FigureView; back: FigureView }
 };
 
 // Solid tones (not see-through), so the filled-in body underneath doesn't show doubled-up edges.
-const SKIN = '#3A3431';
-const MUSCLE = '#4A4340';
-const SEAM = '#1C1715';
+const SKIN = '#2E2E33';
+const MUSCLE = '#3F3F46';
+const SEAM = '#141416';
 
 // The figure's muscle group for each of its parts; parts not listed (head, hands, knees...) are just body.
 const PART_MUSCLE = new Map<string, Muscle>(
@@ -51,8 +51,8 @@ const ORDER = MUSCLE_REGIONS.flatMap((r) => r.muscles);
 
 /**
  * Front and back body (male or female, from the profile) with the muscles a session worked lit
- * up: bright where a muscle was the target, dim where it helped. The lit muscles glow in, then
- * breathe slowly. Below, only the muscles trained, each with a bar for its volume.
+ * up: bright where a muscle was the target, dim where it helped. The lit muscles fade in.
+ * Below, only the muscles trained, each with a bar for its volume.
  */
 export function MuscleMap({
   exercises,

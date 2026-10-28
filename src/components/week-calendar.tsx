@@ -1,10 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
-import { Gradients, Radius, Space } from '@/constants/theme';
+import { Radius, Space } from '@/constants/theme';
 import { fetchMarkedDays, type CalendarKind } from '@/lib/daily';
 import { addDays, dayLabel, firstOfMonth, fromDay, mondayOf, toDay } from '@/lib/dates';
 import { useQuery } from '@/lib/use-query';
@@ -213,11 +212,11 @@ function DayCell({
       ) : null}
       <View style={[styles.ring, { borderColor: selected ? c.text : 'transparent' }]}>
         {done ? (
-          <LinearGradient colors={Gradients.blaze} style={styles.dot}>
+          <View style={[styles.dot, { backgroundColor: c.primary }]}>
             <AppText variant="bodyBold" color="onPrimary">
               {date.getDate()}
             </AppText>
-          </LinearGradient>
+          </View>
         ) : (
           <View style={styles.dot}>
             <AppText variant="bodyBold" color={d === today ? 'primary' : 'textMuted'}>

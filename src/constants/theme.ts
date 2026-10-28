@@ -3,23 +3,22 @@ import { Platform } from 'react-native';
 /**
  * Shredder design tokens.
  *
- * Direction: blaze on black. A pitch-black ground with warm charcoal surfaces and
- * one hot orange-red that carries actions, progress and streaks, polished into a
- * gradient (amber to vermilion) with a soft glow on the things that matter. Amber
- * and bone are its supporting tones for macros and sleep stages; red is for
- * destructive actions.
+ * Direction: midnight black with an orange accent. A pitch-black ground, near-black
+ * neutral surfaces and one flat orange that carries actions, progress and streaks
+ * (no gradients, no glows). Amber and bone are its supporting tones for macros and
+ * sleep stages; red is for destructive actions.
  */
 const palette = {
   black: '#000000',
-  char: '#15100D',
-  charHi: '#221813',
-  line: '#35271F',
-  hairline: '#211814',
+  char: '#0E0E10',
+  charHi: '#18181B',
+  line: '#27272A',
+  hairline: '#18181B',
   white: '#FFFFFF',
-  bone: '#F3E3D6',
-  ash: '#A99E97',
-  smoke: '#6E625B',
-  ember: '#5A2814',
+  bone: '#E7E5E4',
+  ash: '#A1A1AA',
+  smoke: '#71717A',
+  ember: '#1F1F23',
   blaze: '#FF5A1F',
   flame: '#FF8A3D',
   amber: '#FFB547',
@@ -44,7 +43,7 @@ const dark = {
   success: palette.blaze,
   danger: palette.danger,
   ember: palette.flame,
-  glow: 'rgba(255,90,31,0.32)',
+  glow: 'rgba(255,90,31,0.2)',
   protein: palette.blaze,
   carbs: palette.amber,
   fat: palette.bone,
@@ -62,14 +61,6 @@ const dark = {
 export const Colors = { light: dark, dark } as const;
 
 export type ThemeColors = { [K in keyof typeof dark]: string };
-
-/** Gradient stops for expo-linear-gradient. */
-export const Gradients = {
-  blaze: ['#FFA043', '#FF5A1F', '#E6301A'],
-  char: ['#2A1A12', '#0E0907'],
-  sheen: ['rgba(255,120,60,0.09)', 'rgba(255,120,60,0)'],
-  ember: ['#FFD166', '#FF8A3D', '#FF5A1F'],
-} as const satisfies Record<string, readonly [string, string, ...string[]]>;
 
 export const Fonts = {
   display: 'BricolageGrotesque_800ExtraBold',

@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Tabs, useRouter } from 'expo-router';
 import type { BottomTabBarProps } from 'expo-router/tabs';
 import { useEffect, useState } from 'react';
@@ -8,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
-import { glow, Gradients, Radius, Space } from '@/constants/theme';
+import { Radius, Space } from '@/constants/theme';
 import { clock } from '@/lib/dates';
 import { useTodayLayout } from '@/stores/today-layout';
 import { completedSetCount, useWorkout } from '@/stores/workout';
@@ -42,7 +41,6 @@ function TabBar({ state, navigateToTab }: BottomTabBarProps) {
         style={[
           styles.bar,
           { backgroundColor: c.surface, borderColor: c.border, marginBottom: Math.max(insets.bottom, Space.md) },
-          glow('rgba(255,90,31,0.10)', 20),
         ]}>
         {state.routes.map((route, index) => {
           const tab = TABS.find((t) => t.name === route.name);
@@ -57,15 +55,7 @@ function TabBar({ state, navigateToTab }: BottomTabBarProps) {
               onPress={() => {
                 if (!focused) navigateToTab(route.key);
               }}
-              style={[styles.item, focused && glow(c.glow, 14)]}>
-              {focused ? (
-                <LinearGradient
-                  colors={Gradients.blaze}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[StyleSheet.absoluteFill, { borderRadius: Radius.row }]}
-                />
-              ) : null}
+              style={[styles.item, focused && { backgroundColor: c.primary }]}>
               <Ionicons name={focused ? tab.iconOn : tab.icon} size={22} color={focused ? c.onPrimary : c.textMuted} />
               <AppText variant="smallBold" color={focused ? 'onPrimary' : 'textMuted'} style={{ fontSize: 11 }}>
                 {tab.label}
@@ -98,13 +88,7 @@ function ActiveWorkoutBanner() {
       accessibilityRole="button"
       accessibilityLabel="Resume workout"
       onPress={() => router.push('/workout/active')}
-      style={[styles.banner, { borderColor: c.border }]}>
-      <LinearGradient
-        colors={Gradients.blaze}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[StyleSheet.absoluteFill, { borderRadius: Radius.row - 2 }]}
-      />
+      style={[styles.banner, { backgroundColor: c.primary, borderColor: c.border }]}>
       <Ionicons name="barbell" size={18} color={c.onAccent} />
       <AppText variant="bodyBold" color={c.onAccent} style={{ flex: 1 }} numberOfLines={1}>
         {active.name}
