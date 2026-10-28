@@ -23,8 +23,8 @@ export const CARD_NAMES: Record<CardId, string> = {
 };
 
 /** Bottom-bar tabs that can be hidden. Today always stays, since the layout is edited there. */
-export type TabId = 'train' | 'fuel' | 'progress';
-export const TAB_NAMES: Record<TabId, string> = { train: 'Train', fuel: 'Fuel', progress: 'Progress' };
+export type TabId = 'train' | 'fuel' | 'profile';
+export const TAB_NAMES: Record<TabId, string> = { train: 'Train', fuel: 'Fuel', profile: 'Profile' };
 
 const DEFAULT: CardPref[] = [
   { id: 'streak', visible: true, size: 'large' },
@@ -73,7 +73,10 @@ export const useTodayLayout = create<LayoutState>()(
         const old = saved as Partial<LayoutState> | undefined;
         const cards = (old?.cards ?? []).filter((c) => c.id in CARD_NAMES);
         const missing = DEFAULT.filter((d) => !cards.some((c) => c.id === d.id));
-        const hiddenTabs = (old?.hiddenTabs ?? []).filter((t) => t in TAB_NAMES);
+        // Progress became Profile.
+        const hiddenTabs = (old?.hiddenTabs ?? [])
+          .map((t) => ((t as string) === 'progress' ? 'profile' : t))
+          .filter((t) => t in TAB_NAMES);
         return { ...current, cards: cards.length ? [...cards, ...missing] : DEFAULT, hiddenTabs };
       },
     }

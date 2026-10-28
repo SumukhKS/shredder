@@ -11,6 +11,8 @@ import { useColors, useIsDark } from '@/components/ui/theme';
 import { UpdateBanner } from '@/components/update-banner';
 import { Fonts } from '@/constants/theme';
 import { autoMergeExercises } from '@/lib/auto-merge';
+// Sets how reminders show while the app is open.
+import '@/lib/reminders';
 import { useSession } from '@/stores/session';
 import { useWorkout } from '@/stores/workout';
 
@@ -105,7 +107,18 @@ export default function RootLayout() {
               name="food/custom"
               options={{ presentation: 'modal', title: 'Create food', headerTransparent: false }}
             />
-            <Stack.Screen name="settings" options={{ title: 'Goals & settings', headerTransparent: false }} />
+            <Stack.Screen name="settings/index" options={{ title: 'Settings', headerTransparent: false }} />
+            <Stack.Screen name="settings/profile" options={{ title: 'Profile and goals', headerTransparent: false }} />
+            <Stack.Screen name="settings/account" options={{ title: 'Account', headerTransparent: false }} />
+            <Stack.Screen name="settings/notifications" options={{ title: 'Notifications', headerTransparent: false }} />
+            <Stack.Screen name="settings/calculators" options={{ title: 'Calculators', headerTransparent: false }} />
+            <Stack.Screen name="settings/units" options={{ title: 'Units', headerTransparent: false }} />
+            <Stack.Screen name="settings/integrations" options={{ title: 'Integrations', headerTransparent: false }} />
+            <Stack.Screen name="settings/data" options={{ title: 'Import or export data', headerTransparent: false }} />
+            <Stack.Screen name="settings/faq" options={{ title: 'FAQ', headerTransparent: false }} />
+            <Stack.Screen name="settings/updates" options={{ title: 'App updates', headerTransparent: false }} />
+            <Stack.Screen name="profile/edit" options={{ title: 'Edit profile', headerTransparent: false }} />
+            <Stack.Screen name="measurements" options={{ title: 'Body measurements', headerTransparent: false }} />
             <Stack.Screen name="import" options={{ title: 'Import from Hevy', headerTransparent: false }} />
           </Stack.Protected>
         </Stack>

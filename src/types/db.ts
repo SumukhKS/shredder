@@ -26,6 +26,10 @@ export interface Profile {
   longest_streak: number;
   last_active_day: string | null;
   onboarded: boolean;
+  bio?: string | null;
+  /** YYYY-MM-DD */
+  birthday?: string | null;
+  avatar_url?: string | null;
 }
 
 export interface Exercise {
@@ -107,10 +111,20 @@ export interface DailyHealth {
   source?: 'manual' | 'healthkit' | 'health_connect';
 }
 
+/** One day's body measurements; any of them may be missing. Weight in kg, lengths in cm. */
 export interface BodyMetric {
-  id: string;
   day: string;
-  weight_kg: number;
+  weight_kg: number | null;
+  body_fat_pct: number | null;
+  neck_cm: number | null;
+  shoulders_cm: number | null;
+  chest_cm: number | null;
+  waist_cm: number | null;
+  hips_cm: number | null;
+  arm_cm: number | null;
+  forearm_cm: number | null;
+  thigh_cm: number | null;
+  calf_cm: number | null;
 }
 
 export interface FinishWorkoutResult {

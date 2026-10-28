@@ -330,7 +330,6 @@ export default function Today() {
             <AppText variant="h1">{profile.display_name ?? 'athlete'}</AppText>
           </View>
           <IconButton icon="calendar-outline" label="Calendar" onPress={() => router.push('/calendar')} />
-          <IconButton icon="settings-outline" label="Goals and settings" onPress={() => router.push('/settings')} />
         </View>
       )}
 

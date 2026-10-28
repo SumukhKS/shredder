@@ -10,25 +10,11 @@ import { ProgressBar } from '@/components/ui/progress';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Space } from '@/constants/theme';
-import { computeTargets } from '@/lib/nutrition';
+import { ACTIVITY, computeTargets, GOALS } from '@/lib/nutrition';
 import { toCm, toKg, useUnits } from '@/lib/units';
 import { useAppSettings } from '@/stores/app-settings';
 import { useSession } from '@/stores/session';
 import type { ActivityLevel, Goal, Sex } from '@/types/db';
-
-const GOALS: { key: Goal; title: string; detail: string }[] = [
-  { key: 'cut', title: 'Lose fat', detail: 'Moderate deficit, high protein to keep muscle' },
-  { key: 'maintain', title: 'Recomp and maintain', detail: 'Eat at maintenance, get stronger' },
-  { key: 'bulk', title: 'Build muscle', detail: 'Small surplus for lean gains' },
-];
-
-const ACTIVITY: { key: ActivityLevel; title: string; detail: string }[] = [
-  { key: 'sedentary', title: 'Mostly sitting', detail: 'Desk job, little walking' },
-  { key: 'light', title: 'Lightly active', detail: 'Training 1–3 days a week' },
-  { key: 'moderate', title: 'Active', detail: 'Training 3–5 days a week' },
-  { key: 'active', title: 'Very active', detail: 'Training 6–7 days or a physical job' },
-  { key: 'athlete', title: 'Athlete', detail: 'Twice-a-day sessions' },
-];
 
 const STEPS = ['goal', 'body', 'activity', 'review'] as const;
 
@@ -106,7 +92,13 @@ export default function Onboarding() {
             <AppText color="textMuted">This sets your calories and protein. You can change it later.</AppText>
             <View style={{ gap: Space.md }}>
               {GOALS.map((g) => (
-                <OptionCard key={g.key} title={g.title} detail={g.detail} selected={goal === g.key} onPress={() => setGoal(g.key)} />
+                <OptionCard
+                  key={g.key}
+                  title={g.title}
+                  detail={g.detail}
+                  selected={goal === g.key}
+                  onPress={() => setGoal(g.key)}
+                />
               ))}
             </View>
           </>
@@ -161,7 +153,13 @@ export default function Onboarding() {
             <AppText variant="h1">How active is a normal week?</AppText>
             <View style={{ gap: Space.md }}>
               {ACTIVITY.map((a) => (
-                <OptionCard key={a.key} title={a.title} detail={a.detail} selected={activity === a.key} onPress={() => setActivity(a.key)} />
+                <OptionCard
+                  key={a.key}
+                  title={a.title}
+                  detail={a.detail}
+                  selected={activity === a.key}
+                  onPress={() => setActivity(a.key)}
+                />
               ))}
             </View>
           </>
@@ -187,9 +185,7 @@ export default function Onboarding() {
               <Macro label="Fat" value={`${targets.fat} g`} color={c.fat} />
             </View>
             <Card tone="flat">
-              <AppText variant="bodyBold">
-                Drink {targets.water / 1000} L of water, walk 8,000 steps and sleep 8 hours.
-              </AppText>
+              <AppText variant="bodyBold">Drink {targets.water / 1000} L of water, walk 8,000 steps and sleep 8 hours.</AppText>
               <AppText variant="small" color="textMuted">
                 Hitting each one earns bonus XP every day.
               </AppText>

@@ -121,6 +121,24 @@ await as(U, `insert into body_metrics (user_id, day, weight_kg) values ('${U}', 
              on conflict (user_id, day) do update set weight_kg = excluded.weight_kg`);
 assert(Number((await one(U, `select weight_kg from profiles`)).weight_kg) === 73.1, 'weigh-in syncs profile weight');
 
+// Measurements without a weight, on a later day, leave the profile weight alone
+await as(U, `insert into body_metrics (user_id, day, waist_cm, arm_cm) values ('${U}', '2026-10-21', 82.5, 36)`);
+assert(Number((await one(U, `select weight_kg from profiles`)).weight_kg) === 73.1, 'measurement-only row keeps profile weight');
+assert(Number((await one(U, `select waist_cm from body_metrics where day = '2026-10-21'`)).waist_cm) === 82.5, 'measurements are stored');
+await as(U, `insert into body_metrics (user_id, day, weight_kg) values ('${U}', '2026-10-21', 72.8)
+             on conflict (user_id, day) do update set weight_kg = excluded.weight_kg`);
+assert(Number((await one(U, `select weight_kg from profiles`)).weight_kg) === 72.8, 'a later weigh-in still syncs profile weight');
+assert(Number((await one(U, `select waist_cm from body_metrics where day = '2026-10-21'`)).waist_cm) === 82.5,
+  'adding the weight keeps the measurements of that day');
+
+// Profile details the user edits themselves
+await as(U, `update profiles set bio = 'Lifting since 2020', birthday = '1998-04-12', avatar_url = 'https://x/a.jpg' where id = '${U}'`);
+const pd = await one(U, `select bio, birthday from profiles`);
+assert(pd.bio === 'Lifting since 2020' && pd.birthday, 'bio and birthday are editable');
+blocked = false;
+try { await as(U, `update profiles set bio = repeat('x', 301) where id = '${U}'`); } catch { blocked = true; }
+assert(blocked, 'bio is capped at 300 characters');
+
 // Views
 const dn = await one(U, `select * from daily_nutrition where day = '2026-10-20'`);
 assert(dn.kcal === 2120, `daily_nutrition view sums kcal (${dn.kcal})`);

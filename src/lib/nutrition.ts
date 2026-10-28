@@ -10,6 +10,21 @@ const ACTIVITY_FACTOR: Record<ActivityLevel, number> = {
 
 const GOAL_ADJUST: Record<Goal, number> = { cut: -0.2, maintain: 0, bulk: 0.1 };
 
+/** Goal choices, as onboarding and Settings show them. */
+export const GOALS: { key: Goal; title: string; detail: string }[] = [
+  { key: 'cut', title: 'Lose fat', detail: 'Moderate deficit, high protein to keep muscle' },
+  { key: 'maintain', title: 'Recomp and maintain', detail: 'Eat at maintenance, get stronger' },
+  { key: 'bulk', title: 'Build muscle', detail: 'Small surplus for lean gains' },
+];
+
+export const ACTIVITY: { key: ActivityLevel; title: string; detail: string }[] = [
+  { key: 'sedentary', title: 'Mostly sitting', detail: 'Desk job, little walking' },
+  { key: 'light', title: 'Lightly active', detail: 'Training 1–3 days a week' },
+  { key: 'moderate', title: 'Active', detail: 'Training 3–5 days a week' },
+  { key: 'active', title: 'Very active', detail: 'Training 6–7 days or a physical job' },
+  { key: 'athlete', title: 'Athlete', detail: 'Twice-a-day sessions' },
+];
+
 export interface TargetInput {
   sex: Sex;
   age: number;

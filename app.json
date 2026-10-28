@@ -69,7 +69,9 @@
       ],
       "react-native-health-connect",
       "expo-status-bar",
-      "expo-image"
+      "expo-image",
+      "expo-sharing",
+      ["expo-notifications", { "color": "#FF5A1F" }]
     ],
     "experiments": {
       "typedRoutes": true,
