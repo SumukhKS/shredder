@@ -258,11 +258,13 @@ const styles = StyleSheet.create({
   week: { flexDirection: 'row', justifyContent: 'space-between' },
   cell: { flex: 1, alignItems: 'center', gap: 6 },
   letter: { fontSize: 11 },
-  ring: { borderWidth: 2, borderRadius: 24, padding: 2 },
+  // Exactly half of each size (44 and 36), so Android draws true circles.
+  ring: { width: 44, height: 44, borderWidth: 2, borderRadius: 22, padding: 2, overflow: 'hidden' },
   dot: {
     width: 36,
     height: 36,
     borderRadius: 18,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -15,7 +15,7 @@ import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { WeekCalendar } from '@/components/week-calendar';
 import { Fonts, Radius, Space } from '@/constants/theme';
-import { clock, fromDay, toDay } from '@/lib/dates';
+import { fromDay, toDay } from '@/lib/dates';
 import { currentUnits, fromKg, toKg, type WeightUnit } from '@/lib/units';
 import { supabase } from '@/lib/supabase';
 import { usePicker } from '@/stores/picker';
@@ -77,17 +77,16 @@ const weightKg = (v: string, unit: WeightUnit) => {
   return x == null ? null : Math.round(toKg(x, unit) * 100) / 100;
 };
 
-/** Seconds in "1:05:30", "45:10" or "60" (a bare number is minutes); null when it can't be read. */
-function parseLength(text: string): number | null {
-  const parts = text.trim().split(/[:.]/);
-  if (!parts.length || parts.length > 3 || parts.some((p) => !/^\d+$/.test(p))) return null;
-  const n = parts.map(Number);
-  if (n.length === 1) return n[0] * 60;
-  if (n.slice(1).some((x) => x > 59)) return null;
-  return n.length === 2 ? n[0] * 60 + n[1] : n[0] * 3600 + n[1] * 60 + n[2];
+/** Total seconds from the hours, minutes and seconds boxes (empty counts as 0); null when one can't be read. */
+function durationSeconds(d: { h: string; m: string; s: string }): number | null {
+  const parts = [d.h, d.m, d.s].map((x) => x.trim() || '0');
+  if (parts.some((x) => !/^\d+$/.test(x))) return null;
+  const [h, m, sec] = parts.map(Number);
+  if (m > 59 || sec > 59) return null;
+  return h * 3600 + m * 60 + sec;
 }
 
-/** Fix a workout after it was logged: name, date, start time, length, exercises and every set. */
+/** Fix a workout after it was logged: name, date, start time, duration, exercises and every set. */
 export default function EditWorkout() {
   const c = useColors();
   const router = useRouter();
@@ -99,8 +98,8 @@ export default function EditWorkout() {
   const [name, setName] = useState('');
   const [day, setDay] = useState(toDay());
   const [start, setStart] = useState('');
-  // Length as h:mm:ss or m:ss (a plain number is minutes), and the start's seconds, so saving keeps it exact.
-  const [length, setLength] = useState('');
+  // Duration in hours, minutes and seconds, and the start's seconds, so saving keeps it exact.
+  const [duration, setDuration] = useState({ h: '', m: '', s: '' });
   const [startSeconds, setStartSeconds] = useState(0);
   // Weights are shown and typed in the unit chosen when the screen opened.
   const [unit] = useState<WeightUnit>(() => currentUnits().weight);
@@ -124,7 +123,8 @@ export default function EditWorkout() {
         setDay(w.day);
         setStart(`${pad(begin.getHours())}:${pad(begin.getMinutes())}`);
         setStartSeconds(begin.getSeconds());
-        setLength(clock(Math.max(1, Math.round((new Date(w.finished_at).getTime() - begin.getTime()) / 1000))));
+        const total = Math.max(1, Math.round((new Date(w.finished_at).getTime() - begin.getTime()) / 1000));
+        setDuration({ h: String(Math.floor(total / 3600)), m: String(Math.floor((total % 3600) / 60)), s: String(total % 60) });
         setRows(
           [...w.workout_exercises]
             .sort((a, b) => a.position - b.position)
@@ -174,10 +174,10 @@ export default function EditWorkout() {
 
   async function save() {
     const m = /^(\d{1,2})[:.](\d{2})$/.exec(start.trim());
-    const secs = parseLength(length);
+    const secs = durationSeconds(duration);
     if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return setError('Enter the start time as HH:MM, e.g. 07:30.');
     if (secs == null || secs < 1 || secs > 24 * 3600)
-      return setError('Enter how long the workout lasted as h:mm:ss or m:ss, e.g. 1:05:30 or 45:10.');
+      return setError('Enter how long the workout lasted: hours, minutes (0-59) and seconds (0-59).');
     const exercises = rows
       .map((e) => {
         const k = e.exercise.kind;
@@ -218,7 +218,8 @@ export default function EditWorkout() {
       padTop={false}
       scrollRef={scrollRef}
       footer={
-        <View style={[styles.footer, { backgroundColor: c.bg, borderColor: c.hairline, paddingBottom: insets.bottom + Space.lg }]}>
+        <View
+          style={[styles.footer, { backgroundColor: c.bg, borderColor: c.hairline, paddingBottom: insets.bottom + Space.lg }]}>
           {error ? (
             <AppText variant="small" color="danger">
               {error}
@@ -232,20 +233,35 @@ export default function EditWorkout() {
 
       <SectionHeader title="Date" />
       {loaded ? <WeekCalendar day={day} onChange={setDay} kind="workout" /> : null}
+      <Field
+        label="Start time"
+        value={start}
+        onChangeText={setStart}
+        placeholder="07:30"
+        keyboardType="numbers-and-punctuation"
+      />
+
+      <SectionHeader title="Duration" />
       <View style={styles.row}>
-        <View style={{ flex: 1 }}>
-          <Field label="Start time" value={start} onChangeText={setStart} placeholder="07:30" keyboardType="numbers-and-punctuation" />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Field
-            label="Length"
-            value={length}
-            onChangeText={setLength}
-            placeholder="1:00:00"
-            keyboardType="numbers-and-punctuation"
-            hint="h:mm:ss"
-          />
-        </View>
+        {(
+          [
+            ['h', 'Hours', 'hr'],
+            ['m', 'Minutes', 'min'],
+            ['s', 'Seconds', 'sec'],
+          ] as const
+        ).map(([k, label, suffix]) => (
+          <View key={k} style={{ flex: 1 }}>
+            <Field
+              label={label}
+              value={duration[k]}
+              onChangeText={(v) => setDuration((d) => ({ ...d, [k]: v.replace(/[^0-9]/g, '') }))}
+              keyboardType="number-pad"
+              maxLength={2}
+              placeholder="0"
+              suffix={suffix}
+            />
+          </View>
+        ))}
       </View>
 
       <SectionHeader title="Exercises" />
@@ -269,7 +285,13 @@ export default function EditWorkout() {
               patchEx(e.key, (x) => {
                 const last = x.sets[x.sets.length - 1];
                 const blank = { type: 'normal' as const, weight: '', reps: '', duration: '', distance: '' };
-                return { ...x, sets: [...x.sets, { ...(last ?? blank), type: last?.type === 'warmup' ? 'normal' : (last?.type ?? 'normal'), key: key() }] };
+                return {
+                  ...x,
+                  sets: [
+                    ...x.sets,
+                    { ...(last ?? blank), type: last?.type === 'warmup' ? 'normal' : (last?.type ?? 'normal'), key: key() },
+                  ],
+                };
               })
             }
           />
