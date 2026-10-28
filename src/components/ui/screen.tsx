@@ -50,7 +50,17 @@ export function Screen({
         keyboardShouldPersistTaps="handled"
         contentInsetAdjustmentBehavior="automatic"
         refreshControl={
-          onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={c.primary} /> : undefined
+          onRefresh ? (
+            <RefreshControl
+              refreshing={!!refreshing}
+              onRefresh={onRefresh}
+              tintColor={c.primary}
+              colors={[c.primary]}
+              progressBackgroundColor={c.surfaceHi}
+              // Android draws the spinner at the very top; push it below the status bar strip.
+              progressViewOffset={padTop ? insets.top + Space.sm : 0}
+            />
+          ) : undefined
         }
         contentContainerStyle={[
           {
