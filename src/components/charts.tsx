@@ -1,17 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { Easing, useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
-import Svg, { Circle, Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { Fonts, Radius, Space } from '@/constants/theme';
 
-import { PrBadge } from './pr-badge';
 import { AppText } from './ui/text';
 import { useColors } from './ui/theme';
-
-const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 function useWidth() {
   const [w, setW] = useState(0);
@@ -30,48 +26,18 @@ function niceTicks(lo: number, hi: number, count = 5): number[] {
   return out;
 }
 
-/** Smooth curve through the points that never overshoots them (monotone cubic). */
-function smoothPath(pts: { x: number; y: number }[]): string {
-  if (pts.length < 2) return pts.length ? `M${pts[0].x},${pts[0].y}` : '';
-  const n = pts.length;
-  const dx: number[] = [];
-  const slope: number[] = [];
-  for (let i = 0; i < n - 1; i++) {
-    dx.push(pts[i + 1].x - pts[i].x);
-    slope.push((pts[i + 1].y - pts[i].y) / (dx[i] || 1));
-  }
-  const m: number[] = [slope[0]];
-  for (let i = 1; i < n - 1; i++) m.push(slope[i - 1] * slope[i] <= 0 ? 0 : (slope[i - 1] + slope[i]) / 2);
-  m.push(slope[n - 2]);
-  for (let i = 0; i < n - 1; i++) {
-    if (slope[i] === 0) {
-      m[i] = 0;
-      m[i + 1] = 0;
-      continue;
-    }
-    const a = m[i] / slope[i];
-    const b = m[i + 1] / slope[i];
-    const s = a * a + b * b;
-    if (s > 9) {
-      const t = 3 / Math.sqrt(s);
-      m[i] = t * a * slope[i];
-      m[i + 1] = t * b * slope[i];
-    }
-  }
-  let d = `M${pts[0].x},${pts[0].y}`;
-  for (let i = 0; i < n - 1; i++) {
-    const h = dx[i] / 3;
-    d += ` C${pts[i].x + h},${pts[i].y + m[i] * h} ${pts[i + 1].x - h},${pts[i + 1].y - m[i + 1] * h} ${pts[i + 1].x},${pts[i + 1].y}`;
-  }
-  return d;
+/** Straight segments from point to point, so every reading sits exactly where it was logged. */
+function linePath(pts: { x: number; y: number }[]): string {
+  return pts.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' ');
 }
 
 /** Full numbers, never shortened: 12,450 and 72.5, not 12.5K. */
 const fullNumber = (v: number) => (Math.round(v * 10) / 10).toLocaleString();
 
 /**
- * Line chart for one series: a smooth line over a soft wash, hairline gridlines at clean numbers,
- * and the latest point marked. It draws itself in, and touching it shows the value under the finger.
+ * Plain line chart for one series: straight lines between the readings, a dot on each one,
+ * hairline gridlines at clean numbers and dates along the bottom. Touching it shows the value
+ * under the finger; marked points (e.g. PR sessions) are filled dots.
  */
 export function LineChart({
   values,
@@ -94,16 +60,9 @@ export function LineChart({
   const c = useColors();
   const [width, onLayout] = useWidth();
   const [active, setActive] = useState<number | null>(null);
-  const draw = useSharedValue(0);
-  const shape = values.join(',');
-
-  useEffect(() => {
-    draw.value = 0;
-    draw.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) });
-  }, [shape, width, draw]);
 
   // The top band holds the readout, so it never covers the line.
-  const pad = { l: 44, r: 14, t: 58, b: 24 };
+  const pad = { l: 44, r: 14, t: 52, b: 24 };
   const iw = Math.max(1, width - pad.l - pad.r);
   const ih = height - pad.t - pad.b;
   const min = values.length ? Math.min(...values) : 0;
@@ -115,15 +74,13 @@ export function LineChart({
   const x = (i: number) => pad.l + (values.length === 1 ? iw / 2 : (i / (values.length - 1)) * iw);
   const y = (v: number) => pad.t + ih - ((v - lo) / (hi - lo || 1)) * ih;
   const pts = values.map((v, i) => ({ x: x(i), y: y(v) }));
-  const line = smoothPath(pts);
-  const area = pts.length > 1 ? `${line} L${pts[pts.length - 1].x},${pad.t + ih} L${pts[0].x},${pad.t + ih} Z` : '';
-  // Long enough to cover the curve; the dash trick draws the line in from the left.
-  const length = pts.reduce((t, p, i) => (i ? t + Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y) : 0), 0) * 1.2 + 10;
-  const lineProps = useAnimatedProps(() => ({ strokeDashoffset: length * (1 - draw.value) }));
-  const areaProps = useAnimatedProps(() => ({ opacity: draw.value }));
+  const line = linePath(pts);
+  // Dots on every reading while they have room; on long series only the marked ones.
+  const dots = iw / Math.max(1, values.length) >= 7;
 
   const last = values.length - 1;
-  const xLabels = values.length > 2 ? [0, Math.floor(last / 2), last] : values.map((_, i) => i);
+  const xLabels =
+    values.length > 4 ? [0, Math.round(last / 3), Math.round((2 * last) / 3), last] : values.map((_, i) => i);
 
   const pick = (px: number) => {
     if (!values.length) return;
@@ -147,19 +104,12 @@ export function LineChart({
   const shown = active ?? last;
   const tipW = 132;
   const tipX = Math.max(0, Math.min(width - tipW, x(shown) - tipW / 2));
-  const id = `wash-${color.replace(/[^a-z0-9]/gi, '')}`;
 
   return (
     <GestureDetector gesture={gesture}>
       <View onLayout={onLayout} style={{ height }}>
         {width > 0 ? (
           <Svg width={width} height={height}>
-            <Defs>
-              <LinearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor={color} stopOpacity={0.28} />
-                <Stop offset="1" stopColor={color} stopOpacity={0} />
-              </LinearGradient>
-            </Defs>
             {ticks.map((t) => (
               <Line key={t} x1={pad.l} x2={width - pad.r} y1={y(t)} y2={y(t)} stroke={c.hairline} strokeWidth={1} />
             ))}
@@ -175,20 +125,18 @@ export function LineChart({
                 {fullNumber(t)}
               </SvgText>
             ))}
-            {area ? <AnimatedPath d={area} fill={`url(#${id})`} animatedProps={areaProps} /> : null}
-            <AnimatedPath
-              d={line}
-              stroke={color}
-              strokeWidth={2.5}
-              fill="none"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              strokeDasharray={[length, length]}
-              animatedProps={lineProps}
-            />
-            {marks?.map((m, i) =>
-              m && i !== shown ? (
-                <Circle key={`m${i}`} cx={x(i)} cy={y(values[i])} r={4} fill={color} stroke={c.surface} strokeWidth={2} />
+            <Path d={line} stroke={color} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+            {pts.map((p, i) =>
+              (dots || marks?.[i]) && i !== shown ? (
+                <Circle
+                  key={`d${i}`}
+                  cx={p.x}
+                  cy={p.y}
+                  r={3}
+                  fill={marks?.[i] ? color : c.surface}
+                  stroke={color}
+                  strokeWidth={1.5}
+                />
               ) : null
             )}
             {active != null ? (
@@ -202,8 +150,7 @@ export function LineChart({
                 strokeWidth={1}
               />
             ) : null}
-            <Circle cx={x(shown)} cy={y(values[shown])} r={9} fill={color} fillOpacity={0.22} />
-            <Circle cx={x(shown)} cy={y(values[shown])} r={5} fill={color} stroke={c.surface} strokeWidth={2} />
+            <Circle cx={x(shown)} cy={y(values[shown])} r={4.5} fill={color} stroke={c.surface} strokeWidth={2} />
             {xLabels.map((i, k) => (
               <SvgText
                 key={`x${i}`}
@@ -234,7 +181,11 @@ export function LineChart({
                 {format(values[shown])}
                 {unit}
               </AppText>
-              {marks?.[shown] ? <PrBadge size={16} label="PR session" /> : null}
+              {marks?.[shown] ? (
+                <AppText variant="smallBold" color="primary">
+                  PR
+                </AppText>
+              ) : null}
             </View>
           </View>
         ) : null}

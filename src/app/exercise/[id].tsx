@@ -116,8 +116,8 @@ export default function ExerciseDetail() {
                   unit={METRIC_UNITS[metric].trim() ? METRIC_UNITS[metric] : ''}
                 />
                 <AppText variant="small" color="textMuted">
-                  {series.length} session{series.length === 1 ? '' : 's'}. Dots mark sessions where you set a PR; touch the chart
-                  to read any session.
+                  {series.length} session{series.length === 1 ? '' : 's'}. Filled dots mark sessions where you set a PR; touch
+                  the chart to read any session.
                 </AppText>
               </>
             ) : (
