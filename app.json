@@ -49,14 +49,15 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Shredder uses the camera to scan food barcodes.",
+          "cameraPermission": "Shredder uses the camera to scan food barcodes and take progress photos.",
           "recordAudioAndroid": false
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Shredder uses your photos to log meals."
+          "photosPermission": "Shredder uses your photos for your profile picture and progress photos.",
+          "cameraPermission": "Shredder uses the camera to take progress photos."
         }
       ],
       [

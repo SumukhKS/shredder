@@ -12,12 +12,17 @@ export const usePicker = create<{
   created: Exercise | null;
   setCreated: (e: Exercise | null) => void;
   /** A food chosen for a recipe, for the recipe editor. */
+  /** A photo just cropped, for the profile editor. */
+  cropped: string | null;
+  setCropped: (uri: string | null) => void;
   ingredient: Omit<RecipeItem, 'id'> | null;
   setIngredient: (i: Omit<RecipeItem, 'id'> | null) => void;
 }>((set, get) => ({
   picked: null,
   created: null,
   setCreated: (e) => set({ created: e }),
+  cropped: null,
+  setCropped: (uri) => set({ cropped: uri }),
   ingredient: null,
   setIngredient: (i) => set({ ingredient: i }),
   set: (e) => set({ picked: e }),

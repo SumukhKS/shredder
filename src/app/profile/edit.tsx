@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/profile-card';
@@ -13,6 +13,7 @@ import { useColors } from '@/components/ui/theme';
 import { Space } from '@/constants/theme';
 import { toDay } from '@/lib/dates';
 import { ageFrom, uploadAvatar } from '@/lib/profile';
+import { usePicker } from '@/stores/picker';
 import { useSession } from '@/stores/session';
 import type { Sex } from '@/types/db';
 
@@ -34,6 +35,24 @@ export default function EditProfile() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Pick up the photo coming back from the cropper.
+  useFocusEffect(
+    useCallback(() => {
+      const { cropped, setCropped } = usePicker.getState();
+      const userId = useSession.getState().session?.user.id;
+      if (!cropped || !userId) return;
+      setCropped(null);
+      setUploading(true);
+      uploadAvatar(userId, cropped, 'image/jpeg')
+        .then(async (url) => {
+          setAvatar(url);
+          await useSession.getState().updateProfile({ avatar_url: url });
+        })
+        .catch((e) => setError(e instanceof Error ? e.message : 'Could not upload the picture.'))
+        .finally(() => setUploading(false));
+    }, [])
+  );
+
   if (!profile || !session) return null;
 
   // A full, real date that's at least 10 years ago, or null.
@@ -52,23 +71,10 @@ export default function EditProfile() {
 
   async function pickPhoto() {
     setError(null);
-    const r = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-    });
-    if (r.canceled || !r.assets[0]) return;
-    setUploading(true);
-    try {
-      const url = await uploadAvatar(session!.user.id, r.assets[0].uri, r.assets[0].mimeType ?? 'image/jpeg');
-      setAvatar(url);
-      await updateProfile({ avatar_url: url });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not upload the picture.');
-    } finally {
-      setUploading(false);
-    }
+    const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    const asset = r.assets?.[0];
+    if (r.canceled || !asset) return;
+    router.push({ pathname: '/profile/crop', params: { uri: asset.uri, width: asset.width, height: asset.height } });
   }
 
   async function removePhoto() {

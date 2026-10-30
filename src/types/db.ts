@@ -27,6 +27,7 @@ export interface Profile {
   last_active_day: string | null;
   onboarded: boolean;
   tour_seen?: boolean;
+  share_id?: string;
   bio?: string | null;
   /** YYYY-MM-DD */
   birthday?: string | null;
@@ -114,7 +115,7 @@ export interface DailyHealth {
   day: string;
   steps: number | null;
   sleep_min: number | null;
-  source?: 'manual' | 'healthkit' | 'health_connect';
+  source?: 'manual' | 'healthkit' | 'health_connect' | 'phone_sensor';
 }
 
 /** One day's body measurements; any of them may be missing. Weight in kg, lengths in cm. */
