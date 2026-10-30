@@ -165,7 +165,7 @@ assert((await as(V, `select * from routine_exercises`)).rows.length === 0, 'rout
 blocked = false;
 try { await as(U, `insert into foods (name, source, kcal_100g, created_by) values ('Fake', 'seed', 100, '${U}')`); } catch { blocked = true; }
 assert(blocked, 'client cannot insert seed foods');
-await as(U, `insert into foods (name, source, kcal_100g, created_by, barcode) values ('Protein bar', 'custom', 380, '${U}', '8901234567890')`);
+await as(U, `insert into foods (name, source, kcal_100g, protein_100g, carbs_100g, fat_100g, created_by, barcode) values ('Protein bar', 'custom', 380, 30, 40, 11, '${U}', '8901234567890')`);
 assert((await as(V, `select * from foods where barcode = '8901234567890'`)).rows.length === 1, 'cached barcode foods are shared');
 
 // Delete workout cascades
@@ -354,5 +354,30 @@ blocked = false;
 try { await as(W, `select undo_exercise_merge($1)`, [mergeLog.id]); } catch { blocked = true; }
 assert(blocked, 'a merge can only be undone once');
 await as(W, `select merge_exercises($1::jsonb)`, [JSON.stringify([{ from: curlCustom, to: curlLib }])]);
+
+// Numbers that can't be right
+const rejected = async (u, sql, params) => {
+  try { await as(u, sql, params); return false; } catch { return true; }
+};
+const addFood = (name, k, p, c, f, fibre = null) => as(U,
+  `insert into foods (name, source, kcal_100g, protein_100g, carbs_100g, fat_100g, fiber_100g, created_by) values ($1, 'custom', $2, $3, $4, $5, $6, $7)`,
+  [name, k, p, c, f, fibre, U]);
+const foodRefused = async (...a) => { try { await addFood(...a); return false; } catch { return true; } };
+assert(await foodRefused('Impossible', 20, 20, 0, 0), '20 g protein in 20 kcal is refused');
+assert(await foodRefused('Too heavy', 400, 60, 50, 10), 'macros heavier than the food are refused');
+assert(await foodRefused('Too rich', 950, 0, 0, 100), 'more than 900 kcal per 100 g is refused');
+assert(await foodRefused('Beer', 20, 20, 0, 0), 'alcohol does not excuse missing calories');
+assert(!(await foodRefused('Grilled chicken test', 165, 31, 0, 3.6)), 'a real food is accepted');
+assert(!(await foodRefused('Lime test', 30, 0.7, 10.5, 0.2, 2.8)), 'a high-fibre food with its fibre entered is accepted');
+assert(!(await foodRefused('Vodka test', 231, 0, 0, 0)), 'alcohol can have more calories than its macros');
+await db.exec(`insert into foods (name, source, kcal_100g, protein_100g, carbs_100g, fat_100g) values ('Curated USDA test', 'usda', 30, 0.7, 10.5, 0.2)`);
+const workoutForLimits = (await one(U, `select we.id from workout_exercises we join workouts w on w.id = we.workout_id where w.user_id = $1 limit 1`, [U])).id;
+for (const [col, bad] of [['reps', 1001], ['reps', -1], ['weight_kg', 1000.5], ['duration_s', 86401], ['distance_m', 1000001]]) {
+  assert(await rejected(U, `insert into workout_sets (workout_exercise_id, position, set_type, ${col}) values ($1, 99, 'normal', $2)`, [workoutForLimits, bad]),
+    `${col} = ${bad} is refused`);
+}
+assert(await rejected(U, `insert into body_metrics (user_id, day, weight_kg) values ($1, '2026-01-01', 5)`, [U]), 'a 5 kg body weight is refused');
+assert(await rejected(U, `insert into food_logs (user_id, day, meal, food_name, grams, kcal, protein, carbs, fat) values ($1, '2026-01-01', 'lunch', 'x', 0, 0, 0, 0, 0)`, [U]),
+  'logging 0 g of a food is refused');
 
 console.log('\nAll SQL checks passed.');

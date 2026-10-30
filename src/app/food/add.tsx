@@ -14,6 +14,7 @@ import { ensureFood, type FoodCandidate } from '@/lib/foods';
 import { macrosFor, MEALS } from '@/lib/nutrition';
 import { refreshStreaks } from '@/lib/streak';
 import { supabase } from '@/lib/supabase';
+import { parseAmount } from '@/lib/validate';
 import { useSession } from '@/stores/session';
 import type { Meal } from '@/types/db';
 
@@ -31,13 +32,14 @@ export default function AddFood() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const qty = Number(amount.replace(',', '.')) || 0;
+  const qty = parseAmount(amount) ?? 0;
   const grams = unit === 'grams' ? qty : qty * food.serving_g;
   const m = macrosFor(food, grams);
 
   async function log() {
     if (!userId) return;
     if (grams <= 0) return setError('Enter an amount.');
+    if (grams > 100000) return setError('That amount is too large.');
     setSaving(true);
     setError(null);
     try {
@@ -89,7 +91,11 @@ export default function AddFood() {
           value={unit}
           onChange={(u) => {
             setUnit(u);
-            setAmount(u === 'grams' ? String(Math.round(grams || food.serving_g)) : String(Math.round(((grams || food.serving_g) / food.serving_g) * 4) / 4 || 1));
+            setAmount(
+              u === 'grams'
+                ? String(Math.round(grams || food.serving_g))
+                : String(Math.round(((grams || food.serving_g) / food.serving_g) * 4) / 4 || 1)
+            );
           }}
         />
         <Field
@@ -104,7 +110,9 @@ export default function AddFood() {
         />
 
         <View style={{ gap: Space.sm }}>
-          <AppText variant="smallBold" color="textMuted">Meal</AppText>
+          <AppText variant="smallBold" color="textMuted">
+            Meal
+          </AppText>
           <Segmented<Meal> options={MEALS.map((x) => ({ key: x.key, label: x.label }))} value={meal} onChange={setMeal} />
         </View>
 

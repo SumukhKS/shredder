@@ -11,6 +11,7 @@ import { ageFrom } from '@/lib/profile';
 import { ACTIVITY, computeTargets, DEFAULT_SPLIT, GOALS, macroSplit, scaleMacros } from '@/lib/nutrition';
 import { formatWeight, fromCm, toCm } from '@/lib/units';
 import { useAppSettings } from '@/stores/app-settings';
+import { parseAmount } from '@/lib/validate';
 import { useSession } from '@/stores/session';
 
 /** Settings > Profile: body details used for targets, then the calorie, macro and habit goals. */
@@ -39,7 +40,7 @@ export default function ProfileSettings() {
 
   if (!profile) return null;
   const set = (k: Exclude<keyof typeof form, 'activity_level' | 'goal'>) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
-  const heightCm = Math.round(toCm(Number(form.height), lengthUnit) * 10) / 10;
+  const heightCm = Math.round(toCm(parseAmount(form.height) ?? 0, lengthUnit) * 10) / 10;
   const int = (v: string) => Math.max(0, Math.round(Number(v) || 0));
 
   // Calories and macros stay consistent: changing calories rescales the macros at the
@@ -95,6 +96,14 @@ export default function ProfileSettings() {
   }
 
   async function save() {
+    const calories = int(form.calorie_target);
+    const fromMacros = int(form.protein_g) * 4 + int(form.carbs_g) * 4 + int(form.fat_g) * 9;
+    if (calories < 800 || calories > 10000) return setMessage('Enter a calorie target between 800 and 10,000.');
+    if (Math.abs(calories - fromMacros) > Math.max(50, calories * 0.05)) {
+      return setMessage(
+        `Your macros add up to ${fromMacros.toLocaleString()} kcal, not ${calories.toLocaleString()}. Adjust them to match.`
+      );
+    }
     setSaving(true);
     setMessage(null);
     try {
@@ -108,7 +117,7 @@ export default function ProfileSettings() {
         fat_g: int(form.fat_g),
         water_ml_target: int(form.water_ml_target),
         steps_target: int(form.steps_target),
-        sleep_min_target: Math.round((Number(form.sleep_h) || 8) * 60),
+        sleep_min_target: Math.round((parseAmount(form.sleep_h) || 8) * 60),
       });
       setMessage('Saved.');
     } catch (e) {

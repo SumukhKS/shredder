@@ -3,6 +3,7 @@ import { inferMuscle } from '@/lib/body-shapes';
 import { toDay } from '@/lib/dates';
 import { aliasKey, bestMatch } from '@/lib/exercise-match';
 import { supabase } from '@/lib/supabase';
+import { withinLimit } from '@/lib/validate';
 import { fetchExercises } from '@/lib/workouts';
 import type { Exercise, ExerciseKind } from '@/types/db';
 
@@ -536,10 +537,11 @@ export async function importHevy(
           notes: e.notes,
           sets: e.sets.map((s) => ({
             set_type: s.type,
-            weight_kg: s.weightKg != null && s.weightKg > 0 ? Math.round(s.weightKg * 100) / 100 : null,
-            reps: s.reps != null ? Math.round(s.reps) : null,
-            duration_s: s.durationS != null ? Math.round(s.durationS) : null,
-            distance_m: s.distanceM != null ? Math.round(s.distanceM * 10) / 10 : null,
+            // A value no real set could have is dropped rather than failing the whole import.
+            weight_kg: s.weightKg != null && s.weightKg > 0 ? rounded(withinLimit('weight_kg', s.weightKg), 100) : null,
+            reps: rounded(withinLimit('reps', s.reps), 1),
+            duration_s: rounded(withinLimit('duration_s', s.durationS), 1),
+            distance_m: rounded(withinLimit('distance_m', s.distanceM), 10),
             rpe: s.rpe != null && s.rpe >= 1 && s.rpe <= 10 ? s.rpe : null,
           })),
         })),
@@ -595,6 +597,8 @@ function num(v: unknown): number | null {
   const n = typeof v === 'number' ? v : Number(String(v).replace(',', '.'));
   return Number.isFinite(n) ? n : null;
 }
+
+const rounded = (v: number | null, per: number) => (v == null ? null : Math.round(v * per) / per);
 
 function minuteId(d: Date): string {
   return d.toISOString().slice(0, 16) + 'Z';

@@ -6,6 +6,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { toDay } from '@/lib/dates';
 import { supabase } from '@/lib/supabase';
 import { currentUnits, fromKg, toKg, type WeightUnit } from '@/lib/units';
+import { parseAmount, SET_LIMITS } from '@/lib/validate';
 import { beatsAll, e1rm, fetchBests, fetchPreviousSets, type ExerciseBest, type PreviousSet } from '@/lib/workouts';
 import type { Exercise, ExerciseKind, FinishWorkoutResult, Routine, SetType } from '@/types/db';
 
@@ -76,7 +77,7 @@ interface WorkoutState {
   removeSet: (exKey: string, setKey: string) => void;
   updateSet: (exKey: string, setKey: string, patch: Partial<ActiveSet>) => void;
   cycleSetType: (exKey: string, setKey: string) => void;
-  toggleDone: (exKey: string, setKey: string) => { done: boolean; pr: PrHit | null };
+  toggleDone: (exKey: string, setKey: string) => { done: boolean; pr: PrHit | null; problem?: string };
   setRestSeconds: (exKey: string, seconds: number) => void;
   adjustRest: (deltaSeconds: number) => void;
   skipRest: () => void;
@@ -123,7 +124,7 @@ function filled(ex: ActiveExercise, index: number, unit: WeightUnit): ActiveSet 
   return s;
 }
 
-const num = (v: string) => Number(v.replace(',', '.')) || 0;
+const num = (v: string) => parseAmount(v) ?? 0;
 
 /** Did this set beat everything before it, including earlier sets today? */
 // The first workout with an exercise is a baseline: with no past history there is nothing to beat.
@@ -198,16 +199,30 @@ async function history(ids: string[]) {
 
 const SET_CYCLE: SetType[] = ['normal', 'warmup', 'drop', 'failure'];
 
-function setIsValid(ex: ActiveExercise, s: ActiveSet) {
-  switch (ex.exercise.kind) {
+/** Why a set can't be logged as it stands, or null. Cardio is typed in km and minutes, stored as metres and seconds. */
+function setProblem(ex: ActiveExercise, s: ActiveSet, unit: WeightUnit): string | null {
+  const kind = ex.exercise.kind;
+  const cardio = kind === 'distance_time';
+  const fields = [
+    { text: s.weight, stored: (v: number) => toKg(v, unit), limit: SET_LIMITS.weight_kg, label: 'Weight' },
+    { text: s.reps, stored: (v: number) => v, limit: SET_LIMITS.reps, label: 'Reps' },
+    { text: s.duration, stored: (v: number) => v * (cardio ? 60 : 1), limit: SET_LIMITS.duration_s, label: 'Time' },
+    { text: s.distance, stored: (v: number) => v * (cardio ? 1000 : 1), limit: SET_LIMITS.distance_m, label: 'Distance' },
+  ];
+  for (const f of fields) {
+    if (f.text === '') continue;
+    const v = parseAmount(f.text);
+    if (v == null) return `${f.label} needs a number.`;
+    if (f.stored(v) > f.limit) return `${f.label} looks too high. Check the number.`;
+  }
+  switch (kind) {
     case 'weight_reps':
-      return Number(s.reps) > 0;
     case 'bodyweight_reps':
-      return Number(s.reps) > 0;
+      return num(s.reps) > 0 ? null : 'Enter the reps.';
     case 'duration':
-      return Number(s.duration) > 0;
+      return num(s.duration) > 0 ? null : 'Enter the time.';
     case 'distance_time':
-      return Number(s.duration) > 0 || Number(s.distance) > 0;
+      return num(s.duration) > 0 || num(s.distance) > 0 ? null : 'Enter the distance or time.';
   }
 }
 
@@ -338,7 +353,8 @@ export const useWorkout = create<WorkoutState>()(
             return { done: false, pr: null };
           }
           const next = { ...filled(ex, index, unit), done: true };
-          if (!setIsValid(ex, next)) return { done: false, pr: null };
+          const problem = setProblem(ex, next, unit);
+          if (problem) return { done: false, pr: null, problem };
           const pr = detectPr(ex, index, next, unit);
           next.pr = !!pr;
           mapExercise(exKey, (e) => ({ ...e, sets: e.sets.map((x) => (x.key === setKey ? next : x)) }));
@@ -383,13 +399,14 @@ export const useWorkout = create<WorkoutState>()(
                 .map((s) => {
                   // Cardio is entered as km and minutes; everything is stored as metres and seconds.
                   const cardio = ex.exercise.kind === 'distance_time';
-                  const n = (v: string, mult = 1) =>
-                    v === '' ? null : Math.round(Number(v.replace(',', '.')) * mult * 100) / 100;
+                  const n = (v: string, mult = 1) => (v === '' ? null : Math.round(num(v) * mult * 100) / 100);
+                  // Reps and seconds are whole numbers in the database.
+                  const whole = (v: string, mult = 1) => (v === '' ? null : Math.round(num(v) * mult));
                   return {
                     set_type: s.setType,
                     weight_kg: s.weight === '' ? null : Math.round(toKg(num(s.weight), unit) * 100) / 100,
-                    reps: n(s.reps),
-                    duration_s: n(s.duration, cardio ? 60 : 1),
+                    reps: whole(s.reps),
+                    duration_s: whole(s.duration, cardio ? 60 : 1),
                     distance_m: n(s.distance, cardio ? 1000 : 1),
                   };
                 }),
@@ -401,7 +418,7 @@ export const useWorkout = create<WorkoutState>()(
           const finishedAt = new Date();
           const { data, error } = await supabase.rpc('finish_workout', {
             p: {
-              name: active.name,
+              name: active.name.trim() || 'Workout',
               routine_id: active.routineId,
               day: toDay(new Date(active.startedAt)),
               started_at: active.startedAt,
@@ -435,10 +452,7 @@ export function liveVolume(active: ActiveWorkout | null) {
   const unit = active.unit ?? 'kg';
   return active.exercises.reduce(
     (v, e) =>
-      v +
-      e.sets
-        .filter((s) => s.done && s.setType !== 'warmup')
-        .reduce((a, s) => a + toKg(Number(s.weight) || 0, unit) * (Number(s.reps) || 0), 0),
+      v + e.sets.filter((s) => s.done && s.setType !== 'warmup').reduce((a, s) => a + toKg(num(s.weight), unit) * num(s.reps), 0),
     0
   );
 }

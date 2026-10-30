@@ -42,8 +42,14 @@ export function computeTargets({ sex, age, heightCm, weightKg, activity, goal }:
 
   // Protein scales with goal: higher on a cut to protect muscle.
   const proteinPerKg = goal === 'cut' ? 2.2 : goal === 'bulk' ? 1.8 : 2.0;
-  const protein = Math.round(weightKg * proteinPerKg);
-  const fat = Math.round((calories * 0.25) / 9);
+  let protein = Math.round(weightKg * proteinPerKg);
+  let fat = Math.round((calories * 0.25) / 9);
+  // A heavy body on few calories: protein and fat can't take more than the calories allow. Fat gives
+  // way first, down to 15% of calories, then protein.
+  if (protein * 4 + fat * 9 > calories) {
+    fat = Math.round(Math.max(calories * 0.15, calories - protein * 4) / 9);
+    if (protein * 4 + fat * 9 > calories) protein = Math.floor((calories - fat * 9) / 4);
+  }
   const carbs = Math.max(0, Math.round((calories - protein * 4 - fat * 9) / 4));
   const water = Math.round((weightKg * 35) / 250) * 250;
 

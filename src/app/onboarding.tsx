@@ -13,6 +13,7 @@ import { Space } from '@/constants/theme';
 import { ACTIVITY, computeTargets, GOALS } from '@/lib/nutrition';
 import { toCm, toKg, useUnits } from '@/lib/units';
 import { useAppSettings } from '@/stores/app-settings';
+import { parseAmount } from '@/lib/validate';
 import { useSession } from '@/stores/session';
 import type { ActivityLevel, Goal, Sex } from '@/types/db';
 
@@ -36,8 +37,8 @@ export default function Onboarding() {
   const setUnits = useAppSettings((s) => s.setUnits);
   const ageN = Number(age);
   // Stored and calculated in cm and kg whatever is typed.
-  const heightN = Math.round(toCm(Number(height), units.length) * 10) / 10;
-  const weightN = Math.round(toKg(Number(weight), units.weight) * 10) / 10;
+  const heightN = Math.round(toCm(parseAmount(height) ?? 0, units.length) * 10) / 10;
+  const weightN = Math.round(toKg(parseAmount(weight) ?? 0, units.weight) * 10) / 10;
   const bodyValid = ageN >= 13 && ageN <= 90 && heightN >= 120 && heightN <= 230 && weightN >= 30 && weightN <= 250;
 
   const targets = useMemo(

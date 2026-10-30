@@ -22,6 +22,7 @@ import { useColors } from '@/components/ui/theme';
 import { Fonts, hardShadow, Radius, Space } from '@/constants/theme';
 import { clock } from '@/lib/dates';
 import { formatVolume, formatWeight, useUnits, weightNumber, type WeightUnit } from '@/lib/units';
+import { cleanDecimal, cleanInteger } from '@/lib/validate';
 import { MUSCLE_LABELS, type PreviousSet } from '@/lib/workouts';
 import { refreshStreaks } from '@/lib/streak';
 import {
@@ -153,9 +154,7 @@ export default function ActiveWorkoutScreen() {
           gap={Space.lg}
           scrollRef={scrollRef}
           onReorder={w.reorderExercises}
-          renderItem={(ex, { handle }) => (
-            <ExerciseBlock ex={ex} unit={unit} handle={a.exercises.length > 1 ? handle : null} />
-          )}
+          renderItem={(ex, { handle }) => <ExerciseBlock ex={ex} unit={unit} handle={a.exercises.length > 1 ? handle : null} />}
         />
 
         <Button
@@ -433,8 +432,9 @@ function ExerciseBlock({ ex, unit, handle }: { ex: ActiveExercise; unit: WeightU
             onMenu={() => setSetMenuFor(s.key)}
             onRemove={() => w.removeSet(ex.key, s.key)}
             onToggle={() => {
-              const { done, pr } = w.toggleDone(ex.key, s.key);
-              if (pr) celebratePr(pr);
+              const { done, pr, problem } = w.toggleDone(ex.key, s.key);
+              if (problem) Alert.alert('Check this set', problem);
+              else if (pr) celebratePr(pr);
               else if (done) haptic();
             }}
           />
@@ -501,7 +501,7 @@ function SetRow({
   const input = (field: 'weight' | 'distance' | 'reps' | 'duration') => (
     <TextInput
       value={set[field]}
-      onChangeText={(t) => onChange({ [field]: t.replace(/[^0-9.,]/g, '') })}
+      onChangeText={(t) => onChange({ [field]: field === 'reps' ? cleanInteger(t) : cleanDecimal(t) })}
       keyboardType={field === 'reps' ? 'number-pad' : 'decimal-pad'}
       selectTextOnFocus
       multiline={false}

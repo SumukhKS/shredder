@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { foodProblem } from '@/lib/validate';
 import type { Food } from '@/types/db';
 
 const OFF_FIELDS = 'code,product_name,brands,nutriments,serving_size,serving_quantity,countries_tags';
@@ -29,7 +30,7 @@ function fromOff(p: OffProduct): FoodCandidate | null {
   if (!p.product_name || !kcal) return null;
   const servingG = num(p.serving_quantity);
   const brand = Array.isArray(p.brands) ? p.brands[0] : p.brands?.split(',')[0];
-  return {
+  const food: FoodCandidate = {
     name: p.product_name.trim(),
     brand: brand?.trim() || null,
     barcode: p.code ?? null,
@@ -40,7 +41,10 @@ function fromOff(p: OffProduct): FoodCandidate | null {
     protein_100g: num(n['proteins_100g']),
     carbs_100g: num(n['carbohydrates_100g']),
     fat_100g: num(n['fat_100g']),
+    fiber_100g: num(n['fiber_100g']) || null,
   };
+  // Open Food Facts is filled in by anyone, so products whose numbers can't be right are left out.
+  return foodProblem(food) ? null : food;
 }
 
 // Your own foods and the Indian dishes first, then cached products, then USDA basics.
@@ -51,7 +55,11 @@ const SOURCE_RANK: Record<Food['source'], number> = { custom: 0, seed: 1, off: 2
  * foods. Every word must appear, so "chicken breast" finds "Chicken, broilers..., breast".
  */
 export async function searchLocalFoods(query: string, limit = 25): Promise<Food[]> {
-  const words = query.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).slice(0, 6);
+  const words = query
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+    .slice(0, 6);
   let req = supabase.from('foods').select('*');
   if (!words.length) {
     const { data, error } = await req.eq('source', 'seed').order('name').limit(limit);
@@ -74,8 +82,7 @@ export async function searchOpenFoodFacts(query: string, limit = 20): Promise<Fo
   const q = query.trim();
   if (q.length < 3) return [];
   const url =
-    `https://search.openfoodfacts.org/search?page_size=${limit * 2}` +
-    `&fields=${OFF_FIELDS}&q=${encodeURIComponent(q)}`;
+    `https://search.openfoodfacts.org/search?page_size=${limit * 2}` + `&fields=${OFF_FIELDS}&q=${encodeURIComponent(q)}`;
   try {
     const res = await fetch(url, { headers: OFF_HEADERS });
     if (!res.ok) return [];

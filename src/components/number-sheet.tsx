@@ -6,6 +6,7 @@ import { Radius, Space } from '@/constants/theme';
 
 import { Button } from './ui/button';
 import { Field } from './ui/field';
+import { parseAmount } from '@/lib/validate';
 import { AppText } from './ui/text';
 import { useColors } from './ui/theme';
 
@@ -42,8 +43,8 @@ function SheetBody({ title, hint, suffix, initial, decimal, quick, footer, onClo
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
-    const n = Number(value.replace(',', '.'));
-    if (value.trim() === '' || !Number.isFinite(n) || n < 0) return setError('Enter a number.');
+    const n = parseAmount(value);
+    if (n == null) return setError('Enter a number.');
     setSaving(true);
     try {
       await onSave(n);
@@ -57,7 +58,8 @@ function SheetBody({ title, hint, suffix, initial, decimal, quick, footer, onClo
   return (
     <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
       <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Close" />
-      <View style={[styles.sheet, { backgroundColor: c.surface, borderColor: c.border, paddingBottom: insets.bottom + Space.lg }]}>
+      <View
+        style={[styles.sheet, { backgroundColor: c.surface, borderColor: c.border, paddingBottom: insets.bottom + Space.lg }]}>
         <AppText variant="h2">{title}</AppText>
         <Field
           autoFocus
@@ -77,11 +79,14 @@ function SheetBody({ title, hint, suffix, initial, decimal, quick, footer, onClo
                 accessibilityRole="button"
                 accessibilityLabel={`Add ${q.label}`}
                 onPress={() => {
-                  const n = Number(value.replace(',', '.')) || 0;
+                  const n = parseAmount(value) ?? 0;
                   setValue(String(Math.round((n + q.add) * 100) / 100));
                   setError(null);
                 }}
-                style={({ pressed }) => [styles.chip, { borderColor: c.border, backgroundColor: pressed ? c.primarySoft : c.bg }]}>
+                style={({ pressed }) => [
+                  styles.chip,
+                  { borderColor: c.border, backgroundColor: pressed ? c.primarySoft : c.bg },
+                ]}>
                 <AppText variant="smallBold">{q.label}</AppText>
               </Pressable>
             ))}
@@ -134,7 +139,8 @@ function TextSheetBody({ title, initial, placeholder, onClose, onSave }: Omit<Te
   return (
     <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
       <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Close" />
-      <View style={[styles.sheet, { backgroundColor: c.surface, borderColor: c.border, paddingBottom: insets.bottom + Space.lg }]}>
+      <View
+        style={[styles.sheet, { backgroundColor: c.surface, borderColor: c.border, paddingBottom: insets.bottom + Space.lg }]}>
         <AppText variant="h2">{title}</AppText>
         <Field
           autoFocus
