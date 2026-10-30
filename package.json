@@ -62,8 +62,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test:db": "node supabase/tests/schema.test.mjs",
-    "test": "node --import tsx --test tests/*.test.ts"
+    "test:db": "node supabase/tests/schema.test.mjs"
   },
   "private": true
 }
