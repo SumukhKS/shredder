@@ -111,6 +111,8 @@ export default function RootLayout() {
               name="exercise/new"
               options={{ presentation: 'modal', title: 'Create exercise', headerTransparent: false }}
             />
+            <Stack.Screen name="profile/crop" options={{ presentation: 'fullScreenModal', headerShown: false }} />
+            <Stack.Screen name="progress" options={{ title: 'Progress photos', headerTransparent: false }} />
             <Stack.Screen name="recipe/edit" options={{ title: 'Recipe', headerTransparent: false }} />
             <Stack.Screen name="food/search" options={{ title: 'Log food', headerTransparent: false }} />
             <Stack.Screen name="food/add" options={{ presentation: 'modal', title: 'Add food', headerTransparent: false }} />

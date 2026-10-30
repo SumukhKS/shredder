@@ -7,7 +7,7 @@ import { SwipeDays } from '@/components/swipe-days';
 import { Button, IconButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Segmented } from '@/components/ui/chips';
-import { EmptyState, Screen } from '@/components/ui/screen';
+import { LoadError, EmptyState, Screen } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { Space } from '@/constants/theme';
 import { dayLabel, toDay } from '@/lib/dates';
@@ -37,6 +37,7 @@ function Diary({ tabs, day, setDay }: { tabs: React.ReactNode; day: string; setD
   const q = useFoodDay(day);
   return (
     <Screen refreshing={q.refreshing} onRefresh={q.refresh}>
+      <LoadError q={q} what="your diary" />
       {tabs}
       <AppText variant="h3" align="center">
         {dayLabel(day)}

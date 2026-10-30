@@ -1,3 +1,4 @@
+import { Button } from './button';
 import { KeyboardAvoidingView, StyleSheet, View, type ScrollViewProps } from 'react-native';
 import { ScrollView as GHScrollView, RefreshControl } from 'react-native-gesture-handler';
 import Animated, { type AnimatedRef } from 'react-native-reanimated';
@@ -102,6 +103,18 @@ export function SectionHeader({ title, action }: { title: string; action?: React
       </AppText>
       {action}
     </View>
+  );
+}
+
+/** The failed state of a screen with nothing saved to show. Saved data stays on screen instead when there is some. */
+export function LoadError({ q, what }: { q: { data: unknown; error: string | null; reload: () => unknown }; what: string }) {
+  if (q.data != null || !q.error) return null;
+  return (
+    <EmptyState
+      title={`Couldn't load ${what}`}
+      body={q.error}
+      action={<Button label="Try again" variant="secondary" icon="refresh" onPress={() => q.reload()} />}
+    />
   );
 }
 

@@ -8,7 +8,7 @@ import { MenuSheet } from '@/components/menu-sheet';
 import { SwipeDays } from '@/components/swipe-days';
 import { WorkoutDetailCard } from '@/components/workout-card';
 import { Card } from '@/components/ui/card';
-import { EmptyState, Screen } from '@/components/ui/screen';
+import { LoadError, EmptyState, Screen } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Space } from '@/constants/theme';
@@ -73,6 +73,7 @@ export default function TrainingDay() {
 
   return (
     <Screen padTop={false} refreshing={q.refreshing} onRefresh={q.refresh}>
+      <LoadError q={q} what="this day" />
       <AppText variant="h3" align="center">
         {dayLabel(day)}
       </AppText>

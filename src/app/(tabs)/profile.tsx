@@ -17,6 +17,7 @@ import { Space } from '@/constants/theme';
 import { toDay } from '@/lib/dates';
 import { fetchProfileStats, fetchWeekExercises } from '@/lib/profile';
 import { statSeries, type Period, type StatDay, type StatMetric } from '@/lib/profile-stats';
+import { shareImageWithText } from '@/lib/step-sensor';
 import { weekStreaks } from '@/lib/streak';
 import { useUnits, weightNumber } from '@/lib/units';
 import { useQuery } from '@/lib/use-query';
@@ -26,6 +27,8 @@ async function load() {
   const [stats, exercises] = await Promise.all([fetchProfileStats(), fetchWeekExercises()]);
   return { stats, exercises };
 }
+
+const SHARE_SITE = 'https://shredder.shredderfit.workers.dev';
 
 const PERIODS: { key: Period; label: string }[] = [
   { key: 'daily', label: 'Daily' },
@@ -56,7 +59,11 @@ export default function ProfileTab() {
     setSharing(true);
     try {
       const uri = await captureRef(shareRef, { format: 'png', quality: 1, result: 'tmpfile' });
-      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share your profile' });
+      const link = `${SHARE_SITE}/u/${profile!.share_id}`;
+      const text = `Follow my training on Shredder: ${link}\nGet the app: ${SHARE_SITE}/Shredder.apk`;
+      if (!shareImageWithText(uri, text, 'Share your profile')) {
+        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share your profile' });
+      }
     } catch (e) {
       Alert.alert('Could not share', e instanceof Error ? e.message : 'Try again.');
     } finally {

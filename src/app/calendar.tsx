@@ -8,7 +8,7 @@ import { WorkoutCard } from '@/components/workout-card';
 import { IconButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ProgressBar } from '@/components/ui/progress';
-import { Screen, SectionHeader } from '@/components/ui/screen';
+import { LoadError, Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Space, withAlpha } from '@/constants/theme';
@@ -84,6 +84,7 @@ export default function Calendar() {
         summary.refresh();
         marks.reload();
       }}>
+      <LoadError q={summary} what="this day" />
       <Card style={{ gap: Space.md }}>
         <View style={styles.monthRow}>
           <IconButton icon="chevron-back" label="Previous month" onPress={() => setMonth(firstOfMonth(addDays(month, -1)))} />

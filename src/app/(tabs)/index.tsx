@@ -21,14 +21,17 @@ import { Button, IconButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { IconTile } from '@/components/ui/icon-tile';
 import { ProgressBar, Ring } from '@/components/ui/progress';
-import { Screen } from '@/components/ui/screen';
+import { LoadError, Screen } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Radius, Space, withAlpha } from '@/constants/theme';
-import { fetchDay, withWaiting, fetchHabitHistory, type Habit } from '@/lib/daily';
+import { fetchDay, withWaiting, type Habit } from '@/lib/daily';
 import { formatDuration, greeting, toDay } from '@/lib/dates';
 import { HABITS } from '@/lib/habits';
 import { backfillHealth, syncHealthThrottled } from '@/lib/health';
+import { supabase } from '@/lib/supabase';
+import { resumeStepSensor } from '@/lib/step-sensor';
+import { useAppSettings } from '@/stores/app-settings';
 import { formatVolume, useUnits } from '@/lib/units';
 import { useQuery } from '@/lib/use-query';
 import { useSession } from '@/stores/session';
@@ -44,12 +47,11 @@ import {
 import { completedSetCount, liveVolume, useWorkout } from '@/stores/workout';
 
 async function loadWeek(day: string) {
-  const [water, steps, sleep] = await Promise.all([
-    fetchHabitHistory('water', day),
-    fetchHabitHistory('steps', day),
-    fetchHabitHistory('sleep', day),
-  ]);
-  return { water, steps, sleep };
+  const { data, error } = await supabase.rpc('habit_week', { p_end: day });
+  if (error) throw error;
+  const rows = data as { day: string; water: number; steps: number; sleep: number }[];
+  const series = (key: 'water' | 'steps' | 'sleep') => rows.map((r) => ({ day: r.day, value: Number(r[key]) }));
+  return { water: series('water'), steps: series('steps'), sleep: series('sleep') };
 }
 
 /** What a card shows at medium and small size. */
@@ -83,6 +85,7 @@ export default function Today() {
   useFocusEffect(
     useCallback(() => {
       if (!userId) return;
+      if (useAppSettings.getState().stepsSource === 'phone_sensor') resumeStepSensor().catch(() => null);
       syncHealthThrottled(userId, today)
         .then((synced) => (synced ? backfillHealth(userId, today).then(() => true) : false))
         .then((synced) => {
@@ -262,6 +265,7 @@ export default function Today() {
           if (ok) day.reload();
         });
       }}>
+      <LoadError q={day} what="today" />
       {editing ? (
         <View style={styles.header}>
           <View style={{ flex: 1, gap: 2 }}>
