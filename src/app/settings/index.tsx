@@ -2,6 +2,7 @@ import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { View } from 'react-native';
 
+import { useTour } from '@/components/app-tour';
 import { SettingsRow } from '@/components/settings-row';
 import { Screen } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
@@ -61,6 +62,15 @@ export default function Settings() {
           onPress={() => router.push('/settings/data')}
         />
         <SettingsRow icon="help-circle-outline" title="FAQ" onPress={() => router.push('/settings/faq')} />
+        <SettingsRow
+          icon="compass-outline"
+          title="Replay app tour"
+          detail="A quick look around the app"
+          onPress={() => {
+            useTour.setState({ replay: true });
+            router.dismissAll();
+          }}
+        />
         <SettingsRow
           icon="cloud-download-outline"
           title="App updates"

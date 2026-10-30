@@ -26,6 +26,7 @@ export interface Profile {
   longest_streak: number;
   last_active_day: string | null;
   onboarded: boolean;
+  tour_seen?: boolean;
   bio?: string | null;
   /** YYYY-MM-DD */
   birthday?: string | null;

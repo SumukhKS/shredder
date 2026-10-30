@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppTour, useTour } from '@/components/app-tour';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Radius, Space } from '@/constants/theme';
@@ -21,11 +22,14 @@ const TABS: { name: string; label: string; icon: keyof typeof Ionicons.glyphMap;
 
 export default function TabLayout() {
   return (
-    <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} />}>
-      {TABS.map((t) => (
-        <Tabs.Screen key={t.name} name={t.name} options={{ title: t.label }} />
-      ))}
-    </Tabs>
+    <View style={{ flex: 1 }}>
+      <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} />}>
+        {TABS.map((t) => (
+          <Tabs.Screen key={t.name} name={t.name} options={{ title: t.label }} />
+        ))}
+      </Tabs>
+      <AppTour />
+    </View>
   );
 }
 
@@ -35,7 +39,7 @@ function TabBar({ state, navigateToTab }: BottomTabBarProps) {
   // Tabs turned off under Customize layout drop out of the bar.
   const hiddenTabs = useTodayLayout((s) => s.hiddenTabs as string[]);
   return (
-    <View style={{ backgroundColor: c.bg }}>
+    <View style={{ backgroundColor: c.bg }} onLayout={(e) => useTour.setState({ barHeight: e.nativeEvent.layout.height })}>
       <ActiveWorkoutBanner />
       <View
         style={[
