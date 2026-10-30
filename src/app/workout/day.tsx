@@ -5,14 +5,13 @@ import { StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { SwipeDays } from '@/components/swipe-days';
-import { WeekCalendar } from '@/components/week-calendar';
 import { WorkoutDetailCard } from '@/components/workout-card';
 import { Card } from '@/components/ui/card';
 import { EmptyState, Screen } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Space } from '@/constants/theme';
-import { formatDuration, toDay } from '@/lib/dates';
+import { dayLabel, formatDuration, toDay } from '@/lib/dates';
 import { supabase } from '@/lib/supabase';
 import { useQuery } from '@/lib/use-query';
 import { fetchWorkoutExercises } from '@/lib/workouts';
@@ -36,7 +35,6 @@ export default function TrainingDay() {
     const workouts = (data ?? []) as WorkoutSummary[];
     return { workouts, exercises: await fetchWorkoutExercises(workouts.map((w) => w.id)) };
   }, day);
-  const [version, setVersion] = useState(0);
 
   const workouts = q.data?.workouts ?? [];
   const live = active && day === toDay() ? active : null;
@@ -44,20 +42,10 @@ export default function TrainingDay() {
   const exerciseCount = workouts.reduce((n, w) => n + (q.data?.exercises[w.id]?.length ?? 0), 0);
 
   return (
-    <Screen
-      padTop={false}
-      refreshing={q.refreshing}
-      onRefresh={() => {
-        q.refresh();
-        setVersion((v) => v + 1);
-      }}>
-      <WeekCalendar
-        day={day}
-        onChange={setDay}
-        kind="workout"
-        version={version}
-        summary={(n, span) => `${n} training day${n === 1 ? '' : 's'} this ${span}`}
-      />
+    <Screen padTop={false} refreshing={q.refreshing} onRefresh={q.refresh}>
+      <AppText variant="h3" align="center">
+        {dayLabel(day)}
+      </AppText>
       <SwipeDays day={day} onChange={setDay}>
         {workouts.length ? (
           <Animated.View entering={FadeInDown.duration(400)}>

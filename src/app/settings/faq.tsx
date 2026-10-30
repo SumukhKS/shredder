@@ -37,8 +37,8 @@ const FAQ: { q: string; a: string }[] = [
     a: 'Settings > Import or export data > Export all data saves everything you have logged as a JSON file you can keep or send anywhere.',
   },
   {
-    q: 'How do streaks and XP work?',
-    a: 'Logging a workout, food, water or a weigh-in earns XP and keeps your streak alive for the day. Miss a day and the streak starts again.',
+    q: 'What is the week streak?',
+    a: 'The number of weeks in a row, Monday to Sunday, with at least one workout. The current week does not break it until it is over.',
   },
 ];
 

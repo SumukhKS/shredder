@@ -1,7 +1,6 @@
 import { addDays, mondayOf, toDay } from '@/lib/dates';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/stores/session';
-import type { Profile } from '@/types/db';
 
 /**
  * Re-read the profile after logging something. The server keeps the daily streak
@@ -15,17 +14,11 @@ export async function refreshStreaks() {
     .catch(() => null);
 }
 
-/** The daily streak as it stands today: it lapses once a whole day passes with nothing logged. */
-export function dayStreak(profile: Pick<Profile, 'current_streak' | 'last_active_day'>, today = toDay()) {
-  if (!profile.last_active_day) return 0;
-  return profile.last_active_day >= addDays(today, -1) ? profile.current_streak : 0;
-}
-
-/** Mondays of every week with at least one workout, newest first. */
+/** Every week with a workout (its Monday), newest first. Counted on the server, so large histories aren't cut off. */
 export async function fetchWorkoutWeeks(): Promise<string[]> {
-  const { data } = await supabase.from('workouts').select('day').order('day', { ascending: false }).limit(2000);
-  const weeks = new Set(((data ?? []) as { day: string }[]).map((w) => mondayOf(w.day)));
-  return [...weeks].sort().reverse();
+  const { data, error } = await supabase.rpc('profile_stats', { p_today: toDay() });
+  if (error) throw error;
+  return (data as { weeks: string[] }).weeks;
 }
 
 /**

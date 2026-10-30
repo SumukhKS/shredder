@@ -17,8 +17,6 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { Sortable } from '@/components/sortable';
-import { StreakCard } from '@/components/streak-card';
-import { ExerciseList } from '@/components/workout-card';
 import { Button, IconButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { IconTile } from '@/components/ui/icon-tile';
@@ -28,13 +26,11 @@ import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Radius, Space, withAlpha } from '@/constants/theme';
 import { fetchDay, withWaiting, fetchHabitHistory, type Habit } from '@/lib/daily';
-import { greeting, toDay } from '@/lib/dates';
+import { formatDuration, greeting, toDay } from '@/lib/dates';
 import { HABITS } from '@/lib/habits';
 import { backfillHealth, syncHealthThrottled } from '@/lib/health';
-import { dayStreak, fetchWorkoutWeeks, weekStreaks } from '@/lib/streak';
-import { toKg } from '@/lib/units';
+import { formatVolume, useUnits } from '@/lib/units';
 import { useQuery } from '@/lib/use-query';
-import { fetchWorkoutExercises } from '@/lib/workouts';
 import { useSession } from '@/stores/session';
 import {
   CARD_NAMES,
@@ -45,12 +41,7 @@ import {
   type CardSize,
   type TabId,
 } from '@/stores/today-layout';
-import { completedSetCount, useWorkout } from '@/stores/workout';
-
-async function loadToday(day: string) {
-  const d = await fetchDay(day);
-  return { ...d, exercises: await fetchWorkoutExercises(d.workouts.map((w) => w.id)) };
-}
+import { completedSetCount, liveVolume, useWorkout } from '@/stores/workout';
 
 async function loadWeek(day: string) {
   const [water, steps, sleep] = await Promise.all([
@@ -66,7 +57,7 @@ interface Summary {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   value: string;
-  sub: string;
+  sub?: string;
   progress?: number;
   lit: boolean;
 }
@@ -76,14 +67,15 @@ export default function Today() {
   const router = useRouter();
   const { profile, session } = useSession();
   const active = useWorkout((s) => s.active);
+  const startWorkout = useWorkout((s) => s.start);
+  const units = useUnits();
   const { cards: layout, toggle, setSize, setOrder, reset, hiddenTabs, toggleTab } = useTodayLayout();
   // Layout editing happens right here: hold a card to drag it, use its corner to resize it.
   const [editing, setEditing] = useState(false);
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const today = toDay();
-  const day = useQuery(() => loadToday(today), today, { cache: 'today', overlay: withWaiting });
+  const day = useQuery(() => fetchDay(today), today, { cache: 'today', overlay: withWaiting });
   const week = useQuery(() => loadWeek(today), today, { cache: 'today-week' });
-  const weeks = useQuery(fetchWorkoutWeeks, '', { cache: 'workout-weeks' });
   const userId = session?.user.id;
 
   // Pull the last week of steps and sleep when the screen comes back into view (at most every
@@ -120,10 +112,7 @@ export default function Today() {
   const d = day.data;
   const kcal = Math.round(d?.totals.kcal ?? 0);
   const remaining = profile.calorie_target - kcal;
-  const synced = d?.health?.source === 'health_connect';
   const workouts = d?.workouts ?? [];
-  const streaks = weeks.data ? weekStreaks(weeks.data) : undefined;
-  const days = dayStreak(profile);
   const values: Record<Habit, number> = {
     water: d?.waterMl ?? 0,
     steps: d?.health?.steps ?? 0,
@@ -131,7 +120,6 @@ export default function Today() {
   };
 
   const routes: Record<CardId, Href> = {
-    streak: '/streaks',
     calories: '/fuel',
     water: { pathname: '/habit/[kind]', params: { kind: 'water' } },
     steps: { pathname: '/habit/[kind]', params: { kind: 'steps' } },
@@ -141,14 +129,6 @@ export default function Today() {
 
   function summary(id: CardId): Summary {
     switch (id) {
-      case 'streak':
-        return {
-          icon: 'flame',
-          title: 'Streaks',
-          value: `${days} day${days === 1 ? '' : 's'}`,
-          sub: `${streaks?.current ?? 0} week${streaks?.current === 1 ? '' : 's'} training`,
-          lit: days > 0,
-        };
       case 'calories':
         return {
           icon: 'restaurant',
@@ -162,15 +142,7 @@ export default function Today() {
         return {
           icon: 'barbell',
           title: 'Workout',
-          value: workouts.length ? workouts.map((w) => w.name).join(', ') : active ? active.name : 'Not yet',
-          sub: workouts.length
-            ? workouts
-                .flatMap((w) => d?.exercises[w.id] ?? [])
-                .map((e) => e.name)
-                .join(', ') || 'Done today'
-            : active
-              ? `In progress, ${completedSetCount(active)} sets`
-              : 'Nothing logged today',
+          value: active ? active.name : workouts.length ? workouts.map((w) => w.name).join(', ') : 'Not yet',
           progress: workouts.length ? 1 : 0,
           lit: workouts.length > 0 || !!active,
         };
@@ -191,100 +163,80 @@ export default function Today() {
 
   function large(id: CardId, onPress?: () => void) {
     switch (id) {
-      case 'streak':
-        return <StreakCard profile={profile!} weeks={streaks} onPress={onPress} />;
       case 'calories':
         return (
-          <Card onPress={onPress} style={{ gap: Space.lg }}>
-            <View style={styles.row}>
-              <Ring value={kcal / profile!.calorie_target} color={c.primary} size={104} stroke={12}>
-                <AppText variant="stat" style={{ fontSize: 22 }}>
-                  {Math.abs(remaining).toLocaleString()}
-                </AppText>
-                <AppText variant="small" color="textMuted" style={{ fontSize: 11 }}>
-                  {remaining >= 0 ? 'kcal left' : 'kcal over'}
-                </AppText>
-              </Ring>
-              <View style={{ flex: 1, gap: Space.sm }}>
-                <AppText variant="h3">
-                  {kcal.toLocaleString()} of {profile!.calorie_target.toLocaleString()} kcal
-                </AppText>
-                <MacroBar label="Protein" value={d?.totals.protein ?? 0} target={profile!.protein_g} color={c.protein} />
-                <MacroBar label="Carbs" value={d?.totals.carbs ?? 0} target={profile!.carbs_g} color={c.carbs} />
-                <MacroBar label="Fat" value={d?.totals.fat ?? 0} target={profile!.fat_g} color={c.fat} />
-              </View>
-            </View>
-            <Button label="Log food" icon="add" variant="secondary" onPress={() => router.push('/food/search')} />
-          </Card>
-        );
-      case 'workout':
-        return (
-          <Card onPress={onPress} style={{ gap: Space.md }}>
-            <View style={styles.row}>
-              <IconTile icon="barbell" size={36} off={!workouts.length && !active} />
-              <View style={{ flex: 1 }}>
-                <AppText variant="h3">Workout</AppText>
-                <AppText variant="small" color="textMuted">
-                  {workouts.length ? 'Done today' : active ? 'In progress' : 'Nothing logged yet today'}
-                </AppText>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={c.textMuted} />
-            </View>
-            {active ? (
-              <View style={[styles.workout, { borderColor: c.hairline }]}>
-                <AppText variant="h3" numberOfLines={1}>
-                  {active.name}
-                </AppText>
-                <ExerciseList
-                  exercises={active.exercises.slice(0, 3).map((e) => ({
-                    name: e.exercise.name,
-                    kind: e.exercise.kind,
-                    gif_id: e.exercise.gif_id,
-                    exercise_id: e.exercise.id,
-                    sets: e.sets
-                      .filter((s) => s.done)
-                      .map((s) => ({
-                        set_type: s.setType,
-                        weight_kg: toKg(Number(s.weight) || 0, active.unit ?? 'kg') || null,
-                        reps: Number(s.reps) || null,
-                        duration_s: null,
-                        distance_m: null,
-                      })),
-                  }))}
-                  more={Math.max(0, active.exercises.length - 3)}
-                />
-              </View>
-            ) : null}
-            {workouts.map((w) => {
-              const list = d?.exercises[w.id] ?? [];
-              return (
-                <View key={w.id} style={[styles.workout, { borderColor: c.hairline }]}>
-                  <AppText variant="h3" numberOfLines={2}>
-                    {w.name}
-                  </AppText>
-                  <ExerciseList exercises={list.slice(0, 3)} more={list.length - Math.min(list.length, 3)} />
-                </View>
-              );
-            })}
-          </Card>
-        );
-      default:
-        return (
-          <HabitCard
-            kind={id}
-            value={values[id]}
-            target={HABITS[id].target(profile!)}
-            week={week.data?.[id].map((p) => p.value)}
-            note={
-              id === 'water'
-                ? 'Tap to add a drink or set the day’s total'
-                : synced
-                  ? 'Synced from Health Connect'
-                  : 'Connect a device to see this'
-            }
+          <LargeCard
             onPress={onPress}
+            ring={kcal / profile!.calorie_target}
+            value={Math.abs(remaining).toLocaleString()}
+            unit={remaining >= 0 ? 'kcal left' : 'kcal over'}
+            headline={`${kcal.toLocaleString()} of ${profile!.calorie_target.toLocaleString()} kcal`}
+            rows={[
+              macroRow('Protein', d?.totals.protein ?? 0, profile!.protein_g, c.protein),
+              macroRow('Carbs', d?.totals.carbs ?? 0, profile!.carbs_g, c.carbs),
+              macroRow('Fat', d?.totals.fat ?? 0, profile!.fat_g, c.fat),
+            ]}
+            action="Log food"
+            actionIcon="add"
+            onAction={() => router.push('/food/search')}
           />
         );
+      case 'workout': {
+        const sets = workouts.reduce((n, w) => n + w.total_sets, 0) + completedSetCount(active);
+        const volume = workouts.reduce((v, w) => v + Number(w.total_volume), 0) + liveVolume(active);
+        const seconds = workouts.reduce((t, w) => t + w.duration_s, 0);
+        const count = workouts.length + (active ? 1 : 0);
+        return (
+          <LargeCard
+            onPress={onPress}
+            ring={count ? 1 : 0}
+            value={String(count)}
+            unit={count === 1 ? 'workout' : 'workouts'}
+            headline={active ? active.name : workouts.length ? workouts.map((w) => w.name).join(', ') : 'No workout yet today'}
+            rows={[
+              { label: 'Sets', value: sets.toLocaleString(), progress: sets ? 1 : 0, color: c.primary },
+              { label: 'Volume', value: formatVolume(volume, units.weight), progress: volume ? 1 : 0, color: c.primary },
+              { label: 'Duration', value: formatDuration(seconds), progress: seconds ? 1 : 0, color: c.primary },
+            ]}
+            action={active ? 'Resume workout' : 'Start workout'}
+            actionIcon={active ? 'play' : 'add'}
+            onAction={() => {
+              if (!active) startWorkout();
+              router.push('/workout/active');
+            }}
+          />
+        );
+      }
+      default: {
+        const meta = HABITS[id];
+        const target = meta.target(profile!);
+        const last7 = week.data?.[id].map((p) => p.value) ?? [];
+        const average = last7.length ? last7.reduce((a, b) => a + b, 0) / last7.length : 0;
+        const atGoal = target ? last7.filter((v) => v >= target).length : 0;
+        const pct = target ? values[id] / target : 0;
+        return (
+          <LargeCard
+            onPress={onPress}
+            ring={pct}
+            value={`${Math.round(pct * 100)}%`}
+            unit="of goal"
+            headline={`${meta.format(values[id])} of ${meta.format(target)}`}
+            rows={[
+              { label: 'Today', value: meta.format(values[id]), progress: pct, color: c.primary },
+              {
+                label: '7-day average',
+                value: meta.format(Math.round(average)),
+                progress: target ? average / target : 0,
+                color: c.primary,
+              },
+              { label: 'Days at goal', value: `${atGoal} of 7`, progress: atGoal / 7, color: c.primary },
+            ]}
+            action={id === 'water' ? 'Add water' : id === 'steps' ? 'View steps' : 'View sleep'}
+            actionIcon={id === 'water' ? 'add' : 'chevron-forward'}
+            onAction={() => router.push(routes[id])}
+          />
+        );
+      }
     }
   }
 
@@ -306,7 +258,6 @@ export default function Today() {
       onRefresh={() => {
         day.refresh();
         week.reload();
-        weeks.reload();
         syncHealthThrottled(session.user.id, today, true).then((ok) => {
           if (ok) day.reload();
         });
@@ -517,19 +468,73 @@ function EditControls({
   );
 }
 
-function MacroBar({ label, value, target, color }: { label: string; value: number; target: number; color: string }) {
+const macroRow = (label: string, value: number, target: number, color: string): LargeRow => ({
+  label,
+  value: `${Math.round(value)} / ${target} g`,
+  progress: value / target,
+  color,
+});
+
+interface LargeRow {
+  label: string;
+  value: string;
+  progress: number;
+  color: string;
+}
+
+/** Large: the same layout for every card, with a ring, a headline, three rows and one action. */
+function LargeCard({
+  ring,
+  value,
+  unit,
+  headline,
+  rows,
+  action,
+  actionIcon,
+  onAction,
+  onPress,
+}: {
+  ring: number;
+  value: string;
+  unit: string;
+  headline: string;
+  rows: LargeRow[];
+  action: string;
+  actionIcon: keyof typeof Ionicons.glyphMap;
+  onAction: () => void;
+  onPress?: () => void;
+}) {
+  const c = useColors();
   return (
-    <View style={{ gap: 4 }}>
+    <Card onPress={onPress} style={{ gap: Space.lg }}>
       <View style={styles.row}>
-        <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
-          {label}
-        </AppText>
-        <AppText variant="smallBold">
-          {Math.round(value)} / {target} g
-        </AppText>
+        <Ring value={ring} color={c.primary} size={104} stroke={12}>
+          <AppText variant="stat" style={{ fontSize: 22 }} numberOfLines={1} adjustsFontSizeToFit>
+            {value}
+          </AppText>
+          <AppText variant="small" color="textMuted" style={{ fontSize: 11 }}>
+            {unit}
+          </AppText>
+        </Ring>
+        <View style={{ flex: 1, gap: Space.sm }}>
+          <AppText variant="h3" numberOfLines={2}>
+            {headline}
+          </AppText>
+          {rows.map((r) => (
+            <View key={r.label} style={{ gap: 4 }}>
+              <View style={styles.row}>
+                <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
+                  {r.label}
+                </AppText>
+                <AppText variant="smallBold">{r.value}</AppText>
+              </View>
+              <ProgressBar value={r.progress} color={r.color} height={6} />
+            </View>
+          ))}
+        </View>
       </View>
-      <ProgressBar value={value / target} color={color} height={6} />
-    </View>
+      <Button label={action} icon={actionIcon} variant="secondary" onPress={onAction} />
+    </Card>
   );
 }
 
@@ -552,9 +557,11 @@ function RowCard({ s, onPress }: { s: Summary; onPress?: () => void }) {
         <AppText variant="h2" numberOfLines={1}>
           {s.value}
         </AppText>
-        <AppText variant="small" color="textMuted" numberOfLines={1}>
-          {s.sub}
-        </AppText>
+        {s.sub ? (
+          <AppText variant="small" color="textMuted" numberOfLines={1}>
+            {s.sub}
+          </AppText>
+        ) : null}
       </View>
       <Ionicons name="chevron-forward" size={18} color={c.textMuted} />
     </Card>
@@ -576,77 +583,14 @@ function TileCard({ s, onPress }: { s: Summary; onPress?: () => void }) {
         <AppText variant="stat" numberOfLines={1} adjustsFontSizeToFit>
           {s.value}
         </AppText>
-        <AppText variant="small" color="textMuted" numberOfLines={2}>
-          {s.sub}
-        </AppText>
+        {s.sub ? (
+          <AppText variant="small" color="textMuted" numberOfLines={2}>
+            {s.sub}
+          </AppText>
+        ) : null}
       </View>
       {s.progress !== undefined ? <ProgressBar value={s.progress} color={c.primary} height={6} /> : null}
     </Card>
-  );
-}
-
-/** Large habit card: today's value against the goal, plus the last 7 days as mini bars. */
-function HabitCard({
-  kind,
-  value,
-  target,
-  week,
-  note,
-  onPress,
-}: {
-  kind: Habit;
-  value: number;
-  target: number;
-  week?: number[];
-  note: string;
-  onPress?: () => void;
-}) {
-  const c = useColors();
-  const meta = HABITS[kind];
-  const pct = target ? value / target : 0;
-  return (
-    <Card onPress={onPress} style={{ gap: Space.md }}>
-      <View style={styles.row}>
-        <Ring value={pct} color={c.primary} size={76} stroke={9}>
-          <Ionicons name={meta.icon} size={24} color={pct > 0 ? c.text : c.textMuted} />
-        </Ring>
-        <View style={{ flex: 1, gap: 2 }}>
-          <AppText variant="smallBold" color="textMuted">
-            {meta.title}
-          </AppText>
-          <AppText variant="h1" numberOfLines={1} adjustsFontSizeToFit>
-            {meta.format(value)}
-          </AppText>
-          <AppText variant="small" color="textMuted">
-            of {meta.format(target)}, {Math.round(pct * 100)}%
-          </AppText>
-        </View>
-        {week ? <MiniBars values={week} target={target} /> : null}
-      </View>
-      <View style={styles.row}>
-        <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
-          {note}
-        </AppText>
-        {pct >= 1 ? <Ionicons name="checkmark-circle" size={20} color={c.success} /> : null}
-        <Ionicons name="chevron-forward" size={16} color={c.textMuted} />
-      </View>
-    </Card>
-  );
-}
-
-/** Seven slim bars: today's in orange, goal days lit, the rest dim. */
-function MiniBars({ values, target }: { values: number[]; target: number }) {
-  const c = useColors();
-  const max = Math.max(target, ...values, 1);
-  return (
-    <View style={styles.bars} accessibilityLabel="Last 7 days">
-      {values.map((v, i) => {
-        const h = Math.max(4, (v / max) * 40);
-        const last = i === values.length - 1;
-        const color = last ? c.primary : target && v >= target ? withAlpha(c.primary, 0.55) : c.border;
-        return <View key={i} style={[styles.bar, { height: h, backgroundColor: color }]} />;
-      })}
-    </View>
   );
 }
 
@@ -677,7 +621,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tile: { gap: Space.md, minHeight: 150, justifyContent: 'space-between' },
-  bars: { flexDirection: 'row', alignItems: 'flex-end', gap: 4, height: 40 },
-  bar: { width: 6, borderRadius: 3 },
-  workout: { gap: Space.sm, borderTopWidth: 1, paddingTop: Space.md },
 });

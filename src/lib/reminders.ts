@@ -11,7 +11,7 @@ export const REMINDER_TEXT: Record<ReminderKind, { label: string; detail: string
     label: 'Workout',
     detail: 'A nudge to train today',
     title: 'Time to train',
-    body: 'Your streak is waiting. Start a workout in Shredder.',
+    body: 'Time to train. Start a workout in Shredder.',
   },
   food: {
     label: 'Food log',

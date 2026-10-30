@@ -96,7 +96,7 @@ export default function AuthScreen() {
           <IconTile icon="barbell" size={56} />
           <AppText variant="hero">Shredder</AppText>
           <AppText variant="body" color="textMuted" style={{ maxWidth: 320 }}>
-            Log lifts and meals in one place, and keep your streak alive.
+            Log lifts and meals in one place, and see your progress.
           </AppText>
         </Animated.View>
 

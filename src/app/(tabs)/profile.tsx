@@ -167,8 +167,7 @@ export default function ProfileTab() {
           />
         </View>
         <AppText variant="small" color="textMuted">
-          {formatVolume(d?.dash.week.volume ?? 0, u)} lifted. Best run: {d?.bestWeekStreak ?? 0} weeks in a row,{' '}
-          {profile.longest_streak} days.
+          {formatVolume(d?.dash.week.volume ?? 0, u)} lifted. Best run: {d?.bestWeekStreak ?? 0} weeks in a row.
         </AppText>
         {d?.dash.week.exercises.length ? (
           <MuscleMap exercises={d.dash.week.exercises} />

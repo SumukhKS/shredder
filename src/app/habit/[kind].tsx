@@ -15,10 +15,9 @@ import { Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { SwipeDays } from '@/components/swipe-days';
-import { WeekCalendar } from '@/components/week-calendar';
 import { Radius, Space } from '@/constants/theme';
 import { addWater, fetchDay, fetchHabitHistory, setWaterTotal, undoWater, type Habit, withWaiting } from '@/lib/daily';
-import { addDays, fromDay, mondayOf, toDay } from '@/lib/dates';
+import { dayLabel, addDays, fromDay, mondayOf, toDay } from '@/lib/dates';
 import { HABITS, isHabit } from '@/lib/habits';
 import { backfillHealth, connectHealth, healthStatus, syncHealth, type HealthStatus } from '@/lib/health';
 import { refreshStreaks } from '@/lib/streak';
@@ -46,12 +45,9 @@ export default function HabitScreen() {
   const [note, setNote] = useState<string | null>(null);
   const userId = session?.user.id;
 
-  const [version, setVersion] = useState(0);
-
   function reload() {
     snap.reload();
     week.reload();
-    setVersion((v) => v + 1);
   }
 
   // Steps and sleep: check the device link, pull the past year once per session, and refresh
@@ -115,17 +111,11 @@ export default function HabitScreen() {
       onRefresh={() => {
         snap.refresh();
         week.reload();
-        setVersion((v) => v + 1);
       }}>
       <Stack.Screen options={{ title: meta.title }} />
-      <WeekCalendar
-        day={day}
-        onChange={setDay}
-        kind={kind}
-        target={target}
-        version={version}
-        summary={(n, span) => `Goal hit on ${n} day${n === 1 ? '' : 's'} this ${span}`}
-      />
+      <AppText variant="h3" align="center">
+        {dayLabel(day)}
+      </AppText>
       <SwipeDays day={day} onChange={setDay}>
         <Animated.View entering={FadeInDown.duration(400)}>
           <Card tone="hero" style={styles.hero}>

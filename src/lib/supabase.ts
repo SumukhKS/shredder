@@ -13,7 +13,7 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 // RPCs that only read; calling them doesn't make anything on screen stale.
-const READ_RPCS = new Set(['previous_sets', 'exercise_bests', 'exercise_set_history']);
+const READ_RPCS = new Set(['previous_sets', 'exercise_bests', 'exercise_set_history', 'profile_stats', 'search_foods', 'public_profile']);
 let writes = 0;
 
 /** Goes up whenever the app writes to the database, so screens know their data may be out of date (see `useQuery`). */

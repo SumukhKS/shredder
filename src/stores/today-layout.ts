@@ -3,7 +3,7 @@ import 'expo-sqlite/localStorage/install';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-export type CardId = 'streak' | 'calories' | 'water' | 'steps' | 'sleep' | 'workout';
+export type CardId = 'calories' | 'water' | 'steps' | 'sleep' | 'workout';
 /** large: full width with detail. medium: full width, one compact row. small: half-width tile. */
 export type CardSize = 'large' | 'medium' | 'small';
 
@@ -14,7 +14,6 @@ export interface CardPref {
 }
 
 export const CARD_NAMES: Record<CardId, string> = {
-  streak: 'Streaks',
   calories: 'Calories and macros',
   water: 'Water',
   steps: 'Steps',
@@ -27,7 +26,6 @@ export type TabId = 'train' | 'fuel' | 'profile';
 export const TAB_NAMES: Record<TabId, string> = { train: 'Train', fuel: 'Fuel', profile: 'Profile' };
 
 const DEFAULT: CardPref[] = [
-  { id: 'streak', visible: true, size: 'large' },
   { id: 'calories', visible: true, size: 'large' },
   { id: 'workout', visible: true, size: 'large' },
   { id: 'water', visible: true, size: 'medium' },
