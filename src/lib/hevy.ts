@@ -1,4 +1,5 @@
 import { fetchAliases, saveAlias } from '@/lib/auto-merge';
+import { parseCsv } from '@/lib/csv-import';
 import { inferMuscle } from '@/lib/body-shapes';
 import { toDay } from '@/lib/dates';
 import { aliasKey, bestMatch } from '@/lib/exercise-match';
@@ -191,46 +192,6 @@ function fromApiRoutine(r: ApiRoutine): HevyRoutine {
 // Hevy CSV export (any Hevy user)
 // ---------------------------------------------------------------------------
 
-/** RFC 4180 CSV: quoted fields, doubled quotes, newlines inside quotes. */
-export function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = '';
-  let quoted = false;
-  const src = text.replace(/^﻿/, '');
-  for (let i = 0; i < src.length; i++) {
-    const ch = src[i];
-    if (quoted) {
-      if (ch === '"' && src[i + 1] === '"') {
-        field += '"';
-        i++;
-      } else if (ch === '"') {
-        quoted = false;
-      } else {
-        field += ch;
-      }
-    } else if (ch === '"') {
-      quoted = true;
-    } else if (ch === ',') {
-      row.push(field);
-      field = '';
-    } else if (ch === '\n' || ch === '\r') {
-      if (ch === '\r' && src[i + 1] === '\n') i++;
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = '';
-    } else {
-      field += ch;
-    }
-  }
-  if (field || row.length) {
-    row.push(field);
-    rows.push(row);
-  }
-  return rows.filter((r) => r.some((f) => f.trim() !== ''));
-}
-
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
 /** Hevy writes times like "20 Mar 2024, 18:06" in the phone's local time. */
@@ -404,6 +365,8 @@ export interface ImportSource {
   workouts: HevyWorkout[];
   routines?: HevyRoutine[];
   template?: (id: string) => Promise<ApiTemplate>;
+  /** Where the workouts came from, when it isn't Hevy. */
+  app?: 'csv';
 }
 
 const wantedFrom = (source: ImportSource): Wanted[] => [
@@ -546,7 +509,7 @@ export async function importHevy(
           })),
         })),
     }));
-    const { data, error } = await supabase.rpc('import_workouts', { p: { source: 'hevy', workouts: batch } });
+    const { data, error } = await supabase.rpc('import_workouts', { p: { source: source.app ?? 'hevy', workouts: batch } });
     if (error) throw error;
     imported += (data as { imported: number }).imported;
     skipped += (data as { skipped: number }).skipped;

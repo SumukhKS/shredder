@@ -5,13 +5,16 @@ import { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ColumnSheet } from '@/components/column-sheet';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Segmented } from '@/components/ui/chips';
 import { Field } from '@/components/ui/field';
 import { Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Radius, Space } from '@/constants/theme';
+import { buildWorkouts, parseCsv, WORKOUT_FIELDS } from '@/lib/csv-import';
 import {
   fetchFromHevyApi,
   importHevy,
@@ -22,6 +25,7 @@ import {
   type ImportResult,
   type ImportSource,
 } from '@/lib/hevy';
+import { useUnits, type WeightUnit } from '@/lib/units';
 import { matchesSearch, MUSCLE_LABELS } from '@/lib/workouts';
 import { useSession } from '@/stores/session';
 import type { Exercise } from '@/types/db';
@@ -30,11 +34,15 @@ const HEVY_DEVELOPER = 'https://hevy.com/settings?developer';
 
 export default function ImportScreen() {
   const userId = useSession((s) => s.session?.user.id);
+  const units = useUnits();
   const [apiKey, setApiKey] = useState('');
   const [busy, setBusy] = useState<'api' | 'file' | 'review' | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [csv, setCsv] = useState<string[][] | null>(null);
+  const [csvWeight, setCsvWeight] = useState<WeightUnit>(units.weight);
+  const [csvDistance, setCsvDistance] = useState<'m' | 'km' | 'mi'>('m');
 
   // Names to ask about before saving anything, with the file or account they came from.
   const [review, setReview] = useState<{ source: ImportSource; questions: ImportQuestion[]; library: Exercise[] } | null>(null);
@@ -60,6 +68,28 @@ export default function ImportScreen() {
     } finally {
       setBusy(null);
       setStatus(null);
+    }
+  }
+
+  const csvUnits = () => ({
+    weightFactor: csvWeight === 'kg' ? 1 : 0.45359237,
+    metresPerUnit: csvDistance === 'm' ? 1 : csvDistance === 'km' ? 1000 : 1609.344,
+  });
+
+  async function chooseCsv() {
+    setError(null);
+    setResult(null);
+    try {
+      const picked = await DocumentPicker.getDocumentAsync({
+        type: ['text/csv', 'text/comma-separated-values', 'text/plain', 'application/octet-stream'],
+        copyToCacheDirectory: true,
+      });
+      if (picked.canceled) return;
+      const rows = parseCsv(await new File(picked.assets[0].uri).text());
+      if (rows.length < 2) throw new Error('That file has no rows to import.');
+      setCsv(rows);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not read that file.');
     }
   }
 
@@ -129,6 +159,15 @@ export default function ImportScreen() {
         />
       </Card>
 
+      <SectionHeader title="Or import from another app" />
+      <Card style={{ gap: Space.md }}>
+        <AppText variant="small" color="textMuted">
+          For Strong, Liftoff, FitNotes, Jefit or any app that exports a CSV with one row per set. You choose which column is
+          which and see a preview first.
+        </AppText>
+        <Button label="Choose CSV file" variant="secondary" icon="document-outline" disabled={!!busy} onPress={chooseCsv} />
+      </Card>
+
       {status ? (
         <AppText variant="smallBold" color="textMuted">
           {status}
@@ -140,6 +179,59 @@ export default function ImportScreen() {
         </AppText>
       ) : null}
       {result ? <Summary result={result} /> : null}
+      {csv ? (
+        <ColumnSheet
+          title="Match your columns"
+          header={csv[0]}
+          fields={WORKOUT_FIELDS}
+          busy={false}
+          error={null}
+          options={
+            <View style={{ gap: Space.sm }}>
+              <Segmented<WeightUnit>
+                options={[
+                  { key: 'kg', label: 'Weights in kg' },
+                  { key: 'lb', label: 'Weights in lb' },
+                ]}
+                value={csvWeight}
+                onChange={setCsvWeight}
+              />
+              <Segmented<'m' | 'km' | 'mi'>
+                options={[
+                  { key: 'm', label: 'Metres' },
+                  { key: 'km', label: 'Kilometres' },
+                  { key: 'mi', label: 'Miles' },
+                ]}
+                value={csvDistance}
+                onChange={setCsvDistance}
+              />
+            </View>
+          }
+          preview={(map) => {
+            const { workouts, skipped } = buildWorkouts(csv.slice(1), map, csvUnits());
+            const sets = workouts.reduce((n, w) => n + w.exercises.reduce((m, e) => m + e.sets.length, 0), 0);
+            return [
+              `${workouts.length.toLocaleString()} workouts, ${sets.toLocaleString()} sets`,
+              ...(skipped ? [`${skipped.toLocaleString()} rows skipped: no readable date or exercise`] : []),
+              ...workouts
+                .slice(0, 3)
+                .map(
+                  (w) =>
+                    `${w.startedAt.toLocaleDateString(undefined, { dateStyle: 'medium' })}: ${w.name}, ${w.exercises.length} exercises`
+                ),
+            ];
+          }}
+          onClose={() => setCsv(null)}
+          onConfirm={(map) => {
+            const { workouts } = buildWorkouts(csv.slice(1), map, csvUnits());
+            setCsv(null);
+            run('file', async () => {
+              if (workouts.length === 0) throw new Error('No workouts could be read with those columns.');
+              return { workouts, app: 'csv' };
+            });
+          }}
+        />
+      ) : null}
       {review ? (
         <ReviewSheet
           questions={review.questions}

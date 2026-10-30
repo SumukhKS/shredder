@@ -1,8 +1,11 @@
+import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Modal, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LineChart } from '@/components/charts';
+import { ColumnSheet } from '@/components/column-sheet';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Segmented } from '@/components/ui/chips';
@@ -12,7 +15,8 @@ import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Space } from '@/constants/theme';
 import { addDays, fromDay, toDay } from '@/lib/dates';
-import { fetchBodyMetrics, MEASURES, saveBodyMetrics, type Measure, metricsWithWaiting } from '@/lib/profile';
+import { buildMeasurements, MEASUREMENT_FIELDS, parseCsv } from '@/lib/csv-import';
+import { fetchBodyMetrics, importBodyMetrics, MEASURES, saveBodyMetrics, type Measure, metricsWithWaiting } from '@/lib/profile';
 import { refreshStreaks } from '@/lib/streak';
 import { cleanDecimal } from '@/lib/validate';
 import { fromCm, fromKg, toCm, toKg, useUnits, type LengthUnit, type WeightUnit } from '@/lib/units';
@@ -48,7 +52,33 @@ export default function Measurements() {
   const q = useQuery(() => fetchBodyMetrics(1000), '', { cache: 'measurements', overlay: metricsWithWaiting });
   const [range, setRange] = useState<Range>('3m');
   const [logging, setLogging] = useState(false);
+  const userId = useSession((s) => s.session?.user.id);
+  const [csv, setCsv] = useState<string[][] | null>(null);
+  const [csvWeight, setCsvWeight] = useState<WeightUnit>(units.weight);
+  const [csvLength, setCsvLength] = useState<LengthUnit>(units.length);
+  const [csvError, setCsvError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const rows = q.data ?? [];
+
+  const csvFactors = () => ({ weightFactor: toKg(1, csvWeight), lengthFactor: toCm(1, csvLength) });
+
+  async function chooseCsv() {
+    setNotice(null);
+    setCsvError(null);
+    try {
+      const picked = await DocumentPicker.getDocumentAsync({
+        type: ['text/csv', 'text/comma-separated-values', 'text/plain', 'application/octet-stream'],
+        copyToCacheDirectory: true,
+      });
+      if (picked.canceled) return;
+      const table = parseCsv(await new File(picked.assets[0].uri).text());
+      if (table.length < 2) return setNotice('That file has no rows to import.');
+      setCsv(table);
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'Could not read that file.');
+    }
+  }
   const from = RANGES.find((r) => r.key === range)?.days;
   const since = from ? addDays(toDay(), -from) : '';
   const latestOf = (key: Measure) => [...rows].reverse().find((r) => r[key] != null);
@@ -57,6 +87,12 @@ export default function Measurements() {
   return (
     <Screen padTop={false} refreshing={q.refreshing} onRefresh={q.refresh}>
       <Button label="Log measurements" icon="add" onPress={() => setLogging(true)} />
+      <Button label="Import from CSV" icon="document-outline" variant="secondary" onPress={chooseCsv} />
+      {notice ? (
+        <AppText variant="small" color="textMuted">
+          {notice}
+        </AppText>
+      ) : null}
 
       <SectionHeader title="Trends" />
       <Segmented<Range> options={RANGES} value={range} onChange={setRange} />
@@ -134,6 +170,68 @@ export default function Measurements() {
           );
         })}
       </Card>
+
+      {csv ? (
+        <ColumnSheet
+          title="Match your columns"
+          header={csv[0]}
+          fields={MEASUREMENT_FIELDS}
+          busy={importing}
+          error={csvError}
+          options={
+            <View style={{ gap: Space.sm }}>
+              <Segmented<WeightUnit>
+                options={[
+                  { key: 'kg', label: 'Weight in kg' },
+                  { key: 'lb', label: 'Weight in lb' },
+                ]}
+                value={csvWeight}
+                onChange={setCsvWeight}
+              />
+              <Segmented<LengthUnit>
+                options={[
+                  { key: 'cm', label: 'Lengths in cm' },
+                  { key: 'in', label: 'Lengths in inches' },
+                ]}
+                value={csvLength}
+                onChange={setCsvLength}
+              />
+            </View>
+          }
+          preview={(map) => {
+            const out = buildMeasurements(csv.slice(1), map, csvFactors());
+            return [
+              `${out.rows.length.toLocaleString()} days to import`,
+              ...(out.badDates ? [`${out.badDates.toLocaleString()} rows skipped: no readable date`] : []),
+              ...(out.badCells ? [`${out.badCells.toLocaleString()} values skipped: not a believable number`] : []),
+              ...out.rows.slice(0, 3).map(
+                (r) =>
+                  `${fromDay(r.day).toLocaleDateString(undefined, { dateStyle: 'medium' })}: ${Object.entries(r.values)
+                    .map(([k, v]) => `${MEASURES.find((x) => x.key === k)?.label} ${v}`)
+                    .join(', ')}`
+              ),
+            ];
+          }}
+          onClose={() => setCsv(null)}
+          onConfirm={async (map) => {
+            const out = buildMeasurements(csv.slice(1), map, csvFactors());
+            if (out.rows.length === 0) return setCsvError('No measurements could be read with those columns.');
+            setImporting(true);
+            setCsvError(null);
+            try {
+              await importBodyMetrics(userId!, out.rows);
+              await refreshStreaks();
+              await q.reload();
+              setCsv(null);
+              setNotice(`Imported ${out.rows.length.toLocaleString()} days. Values already saved on other days were left alone.`);
+            } catch (e) {
+              setCsvError(e instanceof Error ? e.message : 'The import failed. Check your connection and try again.');
+            } finally {
+              setImporting(false);
+            }
+          }}
+        />
+      ) : null}
 
       {logging ? (
         <LogSheet

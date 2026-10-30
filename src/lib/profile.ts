@@ -75,6 +75,24 @@ export function metricsWithWaiting(rows: BodyMetric[]): BodyMetric[] {
   return [...merged].sort((a, b) => a.day.localeCompare(b.day));
 }
 
+/**
+ * Save imported rows. Rows are grouped by which columns they hold, because the server would blank
+ * any column a row in the same request leaves out, and an empty cell must not erase a saved value.
+ */
+export async function importBodyMetrics(userId: string, rows: { day: string; values: Record<string, number> }[]) {
+  const groups = new Map<string, Record<string, unknown>[]>();
+  for (const r of rows) {
+    const key = Object.keys(r.values).sort().join();
+    groups.set(key, [...(groups.get(key) ?? []), { user_id: userId, day: r.day, ...r.values }]);
+  }
+  for (const group of groups.values()) {
+    for (let i = 0; i < group.length; i += 200) {
+      const { error } = await supabase.from('body_metrics').upsert(group.slice(i, i + 200), { onConflict: 'user_id,day' });
+      if (error) throw error;
+    }
+  }
+}
+
 export interface ProfileTotals {
   workouts: number;
   /** Days with any food logged. */
