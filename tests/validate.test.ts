@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { computeTargets } from '../src/lib/nutrition';
+import { recipeAsFood, recipeTotals } from '../src/lib/recipe-math';
 import { cleanDecimal, cleanInteger, foodProblem, parseAmount, withinLimit } from '../src/lib/validate';
 
 test('parseAmount reads both decimal separators and rejects anything malformed', () => {
@@ -78,4 +79,28 @@ test('targets always add up to the calories', () => {
       }
     }
   }
+});
+
+test('a recipe logs by the serving with the right numbers', () => {
+  const item = (grams: number, kcal: number, protein: number, carbs: number, fat: number) => ({
+    id: 'x',
+    food_id: null,
+    food_name: 'x',
+    grams,
+    kcal,
+    protein,
+    carbs,
+    fat,
+  });
+  const items = [item(200, 700, 50, 120, 3), item(50, 442, 0, 0, 50)];
+  assert.deepEqual(recipeTotals(items), { grams: 250, kcal: 1142, protein: 50, carbs: 120, fat: 53 });
+  const food = recipeAsFood({ id: 'r', name: 'Dal', servings: 4, recipe_items: items });
+  assert.equal(food.serving_g, 62.5);
+  assert.ok(Math.abs((food.kcal_100g * food.serving_g) / 100 - 1142 / 4) < 0.001);
+  assert.equal(Math.round(((food.protein_100g * food.serving_g) / 100) * 10) / 10, 12.5);
+  // No ingredients must not divide by zero.
+  const empty = recipeAsFood({ id: 'r', name: 'Empty', servings: 1, recipe_items: [] });
+  assert.equal(empty.kcal_100g, 0);
+  // Strings from the database add up as numbers.
+  assert.equal(recipeTotals([{ grams: '10.5', kcal: '20', protein: '1', carbs: '2', fat: '3' } as never]).grams, 10.5);
 });

@@ -92,6 +92,7 @@ export interface Food {
   carbs_100g: number;
   fat_100g: number;
   fiber_100g?: number | null;
+  created_by?: string | null;
 }
 
 export interface FoodLog {

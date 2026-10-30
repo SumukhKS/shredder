@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
@@ -10,32 +11,48 @@ import { Space } from '@/constants/theme';
 import { discardEntry, enqueue, trySend } from '@/lib/outbox';
 import { newId } from '@/lib/outbox-core';
 import { cleanDecimal, foodProblem, parseAmount } from '@/lib/validate';
+import { searchLocalFoods } from '@/lib/foods';
 import { useSession } from '@/stores/session';
+import type { Food } from '@/types/db';
 
 export default function CustomFood() {
   const c = useColors();
   const router = useRouter();
-  const params = useLocalSearchParams<{ name?: string; barcode?: string; day?: string; meal?: string }>();
+  const params = useLocalSearchParams<{
+    name?: string;
+    barcode?: string;
+    day?: string;
+    meal?: string;
+    mode?: 'recipe';
+    /** A food of yours to edit (JSON). */
+    food?: string;
+    /** Opened from My Foods: go back there afterwards rather than on to logging. */
+    from?: 'foods';
+  }>();
+  const [editing] = useState<Food | null>(() => (params.food ? (JSON.parse(params.food) as Food) : null));
+  const servingOf = (per100g: number | null | undefined) =>
+    editing && per100g != null ? String(Math.round(((per100g * editing.serving_g) / 100) * 10) / 10) : '';
+  const [similar, setSimilar] = useState<Food[] | null>(null);
   const userId = useSession((s) => s.session?.user.id);
-  const [name, setName] = useState(params.name ?? '');
-  const [brand, setBrand] = useState('');
-  const [servingLabel, setServingLabel] = useState('1 serving');
-  const [servingG, setServingG] = useState('100');
-  const [kcal, setKcal] = useState('');
-  const [protein, setProtein] = useState('');
-  const [carbs, setCarbs] = useState('');
-  const [fat, setFat] = useState('');
-  const [fibre, setFibre] = useState('');
+  const [name, setName] = useState(editing?.name ?? params.name ?? '');
+  const [brand, setBrand] = useState(editing?.brand ?? '');
+  const [servingLabel, setServingLabel] = useState(editing?.serving_label ?? '1 serving');
+  const [servingG, setServingG] = useState(editing ? String(editing.serving_g) : '100');
+  const [kcal, setKcal] = useState(servingOf(editing?.kcal_100g));
+  const [protein, setProtein] = useState(servingOf(editing?.protein_100g));
+  const [carbs, setCarbs] = useState(servingOf(editing?.carbs_100g));
+  const [fat, setFat] = useState(servingOf(editing?.fat_100g));
+  const [fibre, setFibre] = useState(servingOf(editing?.fiber_100g));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const num = (s: string) => parseAmount(s) ?? 0;
 
-  async function save() {
+  async function save(skipSimilar = false) {
     if (!userId) return;
     const g = num(servingG);
     if (!name.trim()) return setError('Name the food.');
-    if (g <= 0) return setError('Enter the serving size in grams.');
+    if (g <= 0 || g > 100000) return setError('Enter the serving size in grams.');
     if (num(kcal) <= 0) return setError('Enter the calories per serving.');
     for (const v of [kcal, protein, carbs, fat, fibre]) {
       if (v.trim() && parseAmount(v) == null) return setError('Calories and macros must be numbers.');
@@ -51,8 +68,30 @@ export default function CustomFood() {
     };
     const problem = foodProblem(numbers);
     if (problem) return setError(problem);
-    setSaving(true);
     setError(null);
+    setSaving(true);
+    // Foods are shared with everyone, so check first that this one isn't there already.
+    if (!editing && !skipSimilar) {
+      const found = await searchLocalFoods(name).catch(() => []);
+      if (found.length) {
+        setSimilar(found.slice(0, 3));
+        setSaving(false);
+        return;
+      }
+    }
+    if (editing) {
+      const row = { ...numbers, brand: brand.trim() || null, serving_label: servingLabel.trim() || `${g} g`, serving_g: g };
+      const entry = enqueue({ kind: 'update', table: 'foods', values: row, match: { id: editing.id } });
+      const sent = await trySend(entry, 6000);
+      if (sent.state === 'refused') {
+        discardEntry(entry.id);
+        setError(sent.reason);
+        setSaving(false);
+        return;
+      }
+      router.back();
+      return;
+    }
     const food = {
       ...numbers,
       id: newId(),
@@ -71,7 +110,11 @@ export default function CustomFood() {
       setSaving(false);
       return;
     }
-    router.replace({ pathname: '/food/add', params: { food: JSON.stringify(food), day: params.day, meal: params.meal } });
+    if (params.from === 'foods') return router.back();
+    router.replace({
+      pathname: '/food/add',
+      params: { food: JSON.stringify(food), day: params.day, meal: params.meal, mode: params.mode },
+    });
   }
 
   return (
@@ -141,7 +184,26 @@ export default function CustomFood() {
             {error}
           </AppText>
         ) : null}
-        <Button label="Save and log" size="lg" loading={saving} onPress={save} />
+        {similar ? (
+          <Card style={{ gap: Space.sm }}>
+            <AppText variant="bodyBold">Already in Shredder?</AppText>
+            {similar.map((f) => (
+              <AppText key={f.id} variant="small" color="textMuted" numberOfLines={2}>
+                {f.name}
+                {f.brand ? ` (${f.brand})` : ''}, {f.serving_label},{' '}
+                {Math.round((Number(f.kcal_100g) * Number(f.serving_g)) / 100).toLocaleString()} kcal
+              </AppText>
+            ))}
+            <Button label="Save mine anyway" variant="secondary" loading={saving} onPress={() => save(true)} />
+          </Card>
+        ) : (
+          <Button
+            label={editing || params.from === 'foods' ? 'Save food' : 'Save and log'}
+            size="lg"
+            loading={saving}
+            onPress={() => save()}
+          />
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );

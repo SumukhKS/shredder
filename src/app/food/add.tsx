@@ -16,6 +16,7 @@ import { refreshStreaks } from '@/lib/streak';
 import { enqueue } from '@/lib/outbox';
 import { newId } from '@/lib/outbox-core';
 import { parseAmount } from '@/lib/validate';
+import { usePicker } from '@/stores/picker';
 import { useSession } from '@/stores/session';
 import type { Meal } from '@/types/db';
 
@@ -24,7 +25,8 @@ type Unit = 'serving' | 'grams';
 export default function AddFood() {
   const c = useColors();
   const router = useRouter();
-  const params = useLocalSearchParams<{ food: string; day?: string; meal?: string }>();
+  const params = useLocalSearchParams<{ food: string; day?: string; meal?: string; mode?: 'recipe' }>();
+  const forRecipe = params.mode === 'recipe';
   const userId = useSession((s) => s.session?.user.id);
   const food = useMemo(() => JSON.parse(params.food) as FoodCandidate, [params.food]);
   const [unit, setUnit] = useState<Unit>(food.serving_label === '100 g' ? 'grams' : 'serving');
@@ -46,8 +48,18 @@ export default function AddFood() {
     try {
       // A food from Open Food Facts is saved to the shared list first. Without a connection the log
       // just keeps its name and numbers.
-      const row = await ensureFood(food, userId).catch(() => null);
+      const row = food.recipe_id ? null : await ensureFood(food, userId).catch(() => null);
       const brand = row?.brand ?? food.brand;
+      if (forRecipe) {
+        usePicker.getState().setIngredient({
+          food_id: row?.id ?? null,
+          food_name: brand ? `${food.name} (${brand})` : food.name,
+          grams: Math.round(grams * 10) / 10,
+          ...m,
+        });
+        router.dismissTo('/recipe/edit');
+        return;
+      }
       enqueue({
         kind: 'insert',
         table: 'food_logs',
@@ -117,14 +129,16 @@ export default function AddFood() {
           selectTextOnFocus
         />
 
-        <View style={{ gap: Space.sm }}>
-          <AppText variant="smallBold" color="textMuted">
-            Meal
-          </AppText>
-          <Segmented<Meal> options={MEALS.map((x) => ({ key: x.key, label: x.label }))} value={meal} onChange={setMeal} />
-        </View>
+        {forRecipe ? null : (
+          <View style={{ gap: Space.sm }}>
+            <AppText variant="smallBold" color="textMuted">
+              Meal
+            </AppText>
+            <Segmented<Meal> options={MEALS.map((x) => ({ key: x.key, label: x.label }))} value={meal} onChange={setMeal} />
+          </View>
+        )}
 
-        <Button label="Log food" size="lg" icon="checkmark" loading={saving} onPress={log} />
+        <Button label={forRecipe ? 'Add to recipe' : 'Log food'} size="lg" icon="checkmark" loading={saving} onPress={log} />
         {food.source === 'off' ? (
           <AppText variant="small" color="textMuted" align="center">
             Nutrition data from Open Food Facts, a community database.

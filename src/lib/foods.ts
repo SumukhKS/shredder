@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { readCache } from '@/lib/use-query';
 import { foodProblem } from '@/lib/validate';
 import type { Food } from '@/types/db';
 
@@ -17,7 +18,11 @@ interface OffProduct {
 }
 
 /** A food that may not be in our database yet (an Open Food Facts hit). */
-export type FoodCandidate = Omit<Food, 'id'> & { id?: string };
+export type FoodCandidate = Omit<Food, 'id'> & {
+  id?: string;
+  /** Set when this is a recipe being logged, which isn't a row in the foods table. */
+  recipe_id?: string;
+};
 
 function num(v: unknown): number {
   const n = typeof v === 'string' ? parseFloat(v) : typeof v === 'number' ? v : NaN;
@@ -47,34 +52,24 @@ function fromOff(p: OffProduct): FoodCandidate | null {
   return foodProblem(food) ? null : food;
 }
 
-// Your own foods and the Indian dishes first, then cached products, then USDA basics.
-const SOURCE_RANK: Record<Food['source'], number> = { custom: 0, seed: 1, off: 2, usda: 3 };
-
 /**
- * Our own catalogue: seeded Indian dishes, USDA everyday foods, cached products, custom
- * foods. Every word must appear, so "chicken breast" finds "Chicken, broilers..., breast".
+ * Our own catalogue, ranked on the server: your foods, then verified ones, then community ones.
+ * Without a connection it searches your foods and recently logged ones on this phone.
  */
 export async function searchLocalFoods(query: string, limit = 25): Promise<Food[]> {
-  const words = query
-    .toLowerCase()
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter(Boolean)
-    .slice(0, 6);
-  let req = supabase.from('foods').select('*');
-  if (!words.length) {
-    const { data, error } = await req.eq('source', 'seed').order('name').limit(limit);
+  const q = query.trim();
+  if (!q) {
+    const { data, error } = await supabase.from('foods').select('*').eq('source', 'seed').order('name').limit(limit);
     if (error) throw error;
     return (data ?? []) as Food[];
   }
-  for (const w of words) req = req.ilike('name', `%${w}%`);
-  const { data, error } = await req.limit(150);
-  if (error) throw error;
-  const first = words[0];
-  const score = (f: Food) => {
-    const name = f.name.toLowerCase();
-    return SOURCE_RANK[f.source] * 1000 + (name.startsWith(first) ? 0 : 500) + name.length;
-  };
-  return ((data ?? []) as Food[]).sort((a, b) => score(a) - score(b)).slice(0, limit);
+  const { data, error } = await supabase.rpc('search_foods', { p_query: q, p_limit: limit });
+  if (!error) return (data ?? []) as Food[];
+  const words = q.toLowerCase().split(/\s+/);
+  const seen = new Set<string>();
+  return [...(readCache<Food[]>('recent-foods') ?? []), ...(readCache<Food[]>('my-foods') ?? [])]
+    .filter((f) => words.every((w) => f.name.toLowerCase().includes(w)) && !seen.has(f.id) && !!seen.add(f.id))
+    .slice(0, limit);
 }
 
 /** Packaged foods from Open Food Facts, products sold in India first. */

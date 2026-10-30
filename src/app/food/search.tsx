@@ -11,13 +11,21 @@ import { Radius, Space } from '@/constants/theme';
 import { toDay } from '@/lib/dates';
 import { searchLocalFoods, searchOpenFoodFacts, type FoodCandidate } from '@/lib/foods';
 import { suggestMeal } from '@/lib/nutrition';
+import { recipeAsFood } from '@/lib/recipe-math';
+import { fetchRecipes, recipesWithWaiting } from '@/lib/recipes';
 import { supabase } from '@/lib/supabase';
+import { readCache, useQuery, writeCache } from '@/lib/use-query';
+import { matchesSearch } from '@/lib/workouts';
+import { useSession } from '@/stores/session';
 import type { Food } from '@/types/db';
 
 export default function FoodSearch() {
   const c = useColors();
   const router = useRouter();
-  const params = useLocalSearchParams<{ day?: string; meal?: string }>();
+  const params = useLocalSearchParams<{ day?: string; meal?: string; mode?: 'recipe' }>();
+  const forRecipe = params.mode === 'recipe';
+  const userId = useSession((s) => s.session?.user.id);
+  const recipes = useQuery(fetchRecipes, '', { cache: 'recipes', overlay: recipesWithWaiting });
   const day = params.day ?? toDay();
   const meal = params.meal ?? suggestMeal();
   const [query, setQuery] = useState('');
@@ -34,7 +42,8 @@ export default function FoodSearch() {
       .not('food_id', 'is', null)
       .order('created_at', { ascending: false })
       .limit(40)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) return setRecent(readCache<Food[]>('recent-foods') ?? []);
         const seen = new Set<string>();
         const foods: Food[] = [];
         for (const row of (data ?? []) as unknown as { foods: Food | null }[]) {
@@ -43,7 +52,9 @@ export default function FoodSearch() {
             foods.push(row.foods);
           }
         }
-        setRecent(foods.slice(0, 10));
+        const latest = foods.slice(0, 10);
+        if (latest.length) writeCache('recent-foods', latest);
+        setRecent(latest);
       });
   }, []);
 
@@ -51,7 +62,9 @@ export default function FoodSearch() {
   useEffect(() => {
     let cancelled = false;
     const t1 = setTimeout(() => {
-      searchLocalFoods(query).then((r) => !cancelled && setLocal(r)).catch(() => {});
+      searchLocalFoods(query)
+        .then((r) => !cancelled && setLocal(r))
+        .catch(() => {});
     }, 150);
     const t2 =
       query.trim().length >= 3
@@ -70,11 +83,18 @@ export default function FoodSearch() {
   }, [query]);
 
   function open(food: FoodCandidate) {
-    router.push({ pathname: '/food/add', params: { food: JSON.stringify(food), day, meal } });
+    router.push({ pathname: '/food/add', params: { food: JSON.stringify(food), day, meal, mode: params.mode } });
   }
 
   const localBarcodes = new Set(local.map((f) => f.barcode).filter(Boolean));
+  const q = query.trim();
+  const myRecipes = forRecipe
+    ? []
+    : (recipes.data ?? [])
+        .filter((r) => r.recipe_items.length && (q === '' || matchesSearch(r.name, q)))
+        .map((r) => recipeAsFood(r) as FoodCandidate);
   const sections = [
+    ...(myRecipes.length ? [{ title: 'My recipes', data: myRecipes }] : []),
     ...(query.trim() === '' && recent.length ? [{ title: 'Recent', data: recent as FoodCandidate[] }] : []),
     { title: query.trim() ? 'Shredder foods' : 'Popular dishes', data: local as FoodCandidate[] },
     ...(remote.length
@@ -91,18 +111,24 @@ export default function FoodSearch() {
             onChangeText={(t) => {
               setQuery(t);
               setRemote([]);
-            }} placeholder="Search dosa, paneer, oats..." autoCorrect={false} autoFocus />
+            }}
+            placeholder="Search dosa, paneer, oats..."
+            autoCorrect={false}
+            autoFocus
+          />
         </View>
-        <Button
-          label="Scan"
-          icon="barcode-outline"
-          variant="secondary"
-          onPress={() => router.push({ pathname: '/food/scan', params: { day, meal } })}
-        />
+        {forRecipe ? null : (
+          <Button
+            label="Scan"
+            icon="barcode-outline"
+            variant="secondary"
+            onPress={() => router.push({ pathname: '/food/scan', params: { day, meal } })}
+          />
+        )}
       </View>
       <SectionList
         sections={sections}
-        keyExtractor={(f, i) => f.id ?? f.barcode ?? `${f.name}-${i}`}
+        keyExtractor={(f, i) => f.id ?? f.recipe_id ?? f.barcode ?? `${f.name}-${i}`}
         keyboardShouldPersistTaps="handled"
         stickySectionHeadersEnabled={false}
         contentContainerStyle={{ paddingHorizontal: Space.lg, paddingBottom: 60, gap: Space.sm }}
@@ -126,6 +152,7 @@ export default function FoodSearch() {
                 {item.name}
               </AppText>
               <AppText variant="small" color="textMuted" numberOfLines={1}>
+                {item.source === 'custom' && !item.recipe_id && item.created_by !== userId ? 'Community, ' : ''}
                 {item.brand ? `${item.brand}, ` : ''}
                 {item.serving_label}, {Math.round((item.kcal_100g * item.serving_g) / 100)} kcal
               </AppText>
@@ -140,7 +167,9 @@ export default function FoodSearch() {
               label={query.trim() ? `Create “${query.trim()}”` : 'Create a custom food'}
               variant="ghost"
               icon="create-outline"
-              onPress={() => router.push({ pathname: '/food/custom', params: { name: query.trim(), day, meal } })}
+              onPress={() =>
+                router.push({ pathname: '/food/custom', params: { name: query.trim(), day, meal, mode: params.mode } })
+              }
             />
           </View>
         }

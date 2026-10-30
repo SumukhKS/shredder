@@ -111,6 +111,7 @@ export default function RootLayout() {
               name="exercise/new"
               options={{ presentation: 'modal', title: 'Create exercise', headerTransparent: false }}
             />
+            <Stack.Screen name="recipe/edit" options={{ title: 'Recipe', headerTransparent: false }} />
             <Stack.Screen name="food/search" options={{ title: 'Log food', headerTransparent: false }} />
             <Stack.Screen name="food/add" options={{ presentation: 'modal', title: 'Add food', headerTransparent: false }} />
             <Stack.Screen name="food/scan" options={{ presentation: 'fullScreenModal', headerShown: false }} />
