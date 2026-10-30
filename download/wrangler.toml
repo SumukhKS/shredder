@@ -2,3 +2,8 @@ name = "shredder"
 main = "worker.js"
 compatibility_date = "2026-10-01"
 preview_urls = false
+
+# Public values, the same ones the app ships with. Row-level security protects the data.
+[vars]
+SUPABASE_URL = "https://shredder-api.shredderfit.workers.dev"
+SUPABASE_PUBLISHABLE_KEY = "sb_publishable_8JpkVkwl8indMXRbaex41w_ZuDo7zLz"
