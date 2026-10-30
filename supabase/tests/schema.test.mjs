@@ -455,4 +455,13 @@ await as(U, `update profiles set tour_seen = true where id = '${U}'`);
 assert((await one(U, `select tour_seen from profiles`)).tour_seen === true, 'you can mark the tour as seen');
 await db.exec(`insert into daily_health (user_id, day, steps, source) values ('${U}', '2026-01-05', 100, 'phone_sensor')`);
 
+// Today's single requests return what the separate queries did.
+await db.exec(`insert into water_logs (id, user_id, day, ml) values (gen_random_uuid(), '${U}', '2026-01-05', 500)`);
+const bundle = (await one(U, `select day_bundle('2026-01-05') as b`)).b;
+assert(bundle.water.length === 1 && Number(bundle.water[0].ml) === 500, 'day_bundle returns the water');
+assert(bundle.health.steps === 100 && Array.isArray(bundle.logs) && Array.isArray(bundle.workouts), 'day_bundle returns the day');
+const weekRows = (await one(U, `select habit_week('2026-01-05') as w`)).w;
+assert(weekRows.length === 7 && weekRows[6].day === '2026-01-05' && weekRows[6].steps === 100, 'habit_week ends on the day, oldest first');
+assert(Number(weekRows[6].water) === 500 && weekRows[0].steps === 0, 'habit_week fills empty days with zero');
+
 console.log('\nAll SQL checks passed.');

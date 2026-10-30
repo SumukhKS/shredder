@@ -17,25 +17,9 @@ export interface DaySnapshot {
 }
 
 export async function fetchDay(day: string): Promise<DaySnapshot> {
-  const [logs, water, health, workouts] = await Promise.all([
-    supabase.from('food_logs').select('*').eq('day', day).order('created_at'),
-    supabase.from('water_logs').select('id, ml').eq('day', day).order('created_at'),
-    supabase.from('daily_health').select('day, steps, sleep_min, source').eq('day', day).maybeSingle(),
-    supabase
-      .from('workouts')
-      .select('id, name, day, started_at, duration_s, total_volume, total_sets, pr_count')
-      .eq('day', day)
-      .order('started_at'),
-  ]);
-  if (logs.error) throw logs.error;
-
-  return withTotals({
-    day,
-    logs: (logs.data ?? []) as FoodLog[],
-    water: (water.data ?? []) as DaySnapshot['water'],
-    health: (health.data as DailyHealth | null) ?? null,
-    workouts: (workouts.data ?? []) as WorkoutSummary[],
-  });
+  const { data, error } = await supabase.rpc('day_bundle', { p_day: day });
+  if (error) throw error;
+  return withTotals({ day, ...(data as Omit<DayRows, 'day'>) });
 }
 
 type DayRows = Pick<DaySnapshot, 'logs' | 'water' | 'health' | 'workouts'> & { day: string };
