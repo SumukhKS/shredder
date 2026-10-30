@@ -1,6 +1,8 @@
 import { File } from 'expo-file-system';
 
 import { addDays, mondayOf, toDay } from '@/lib/dates';
+import { enqueue, waitingEntries } from '@/lib/outbox';
+import { applyPending } from '@/lib/outbox-core';
 import { supabase } from '@/lib/supabase';
 import { fetchWorkoutExercises, type ExerciseLog } from '@/lib/workouts';
 import type { BodyMetric } from '@/types/db';
@@ -60,11 +62,16 @@ export async function fetchBodyMetrics(limit = 365): Promise<BodyMetric[]> {
 }
 
 /** Save some measurements for a day; the ones left out keep their values. Weight in kg, lengths in cm. */
-export async function saveBodyMetrics(userId: string, day: string, values: Partial<Record<Measure, number | null>>) {
-  const { error } = await supabase
-    .from('body_metrics')
-    .upsert({ user_id: userId, day, ...values }, { onConflict: 'user_id,day' });
-  if (error) throw error;
+export function saveBodyMetrics(userId: string, day: string, values: Partial<Record<Measure, number | null>>) {
+  enqueue({ kind: 'upsert', table: 'body_metrics', values: { user_id: userId, day, ...values }, onConflict: 'user_id,day' });
+}
+
+/** Measurements with what's still waiting to be sent applied, oldest first. For useQuery's `overlay`. */
+export function metricsWithWaiting(rows: BodyMetric[]): BodyMetric[] {
+  const entries = waitingEntries();
+  if (entries.length === 0) return rows;
+  const merged = applyPending(rows as unknown as Record<string, unknown>[], entries, 'body_metrics') as unknown as BodyMetric[];
+  return [...merged].sort((a, b) => a.day.localeCompare(b.day));
 }
 
 export interface ProfileTotals {

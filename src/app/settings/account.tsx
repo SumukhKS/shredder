@@ -1,3 +1,4 @@
+import { Alert } from 'react-native';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -6,6 +7,7 @@ import { Field } from '@/components/ui/field';
 import { Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { Space } from '@/constants/theme';
+import { hasWaitingEntries } from '@/lib/outbox';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/stores/session';
 
@@ -16,6 +18,18 @@ export default function AccountSettings() {
   const [confirm, setConfirm] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  function confirmSignOut() {
+    if (!hasWaitingEntries()) return signOut();
+    Alert.alert(
+      'Not everything has synced',
+      'Some entries are only on this phone. They stay here and will sync next time you sign in to this account.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign out', style: 'destructive', onPress: signOut },
+      ]
+    );
+  }
 
   const error =
     password && password.length < 8
@@ -72,7 +86,7 @@ export default function AccountSettings() {
         onPress={changePassword}
       />
 
-      <Button label="Sign out" variant="danger" onPress={signOut} style={{ marginTop: Space.xl }} />
+      <Button label="Sign out" variant="danger" onPress={confirmSignOut} style={{ marginTop: Space.xl }} />
     </Screen>
   );
 }

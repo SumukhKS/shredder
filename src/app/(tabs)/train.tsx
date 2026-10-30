@@ -8,8 +8,16 @@ import { Card } from '@/components/ui/card';
 import { EmptyState, Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { Space } from '@/constants/theme';
+import { pendingWorkouts } from '@/lib/outbox';
 import { useQuery } from '@/lib/use-query';
-import { countWorkouts, fetchRecentWorkouts, fetchRoutines, fetchWorkoutExercises, type ExerciseLog } from '@/lib/workouts';
+import {
+  countWorkouts,
+  fetchRecentWorkouts,
+  fetchRoutines,
+  fetchWorkoutExercises,
+  type ExerciseLog,
+  routinesWithWaiting,
+} from '@/lib/workouts';
 import { useWorkout } from '@/stores/workout';
 import type { Routine, WorkoutSummary } from '@/types/db';
 
@@ -19,6 +27,9 @@ interface Page {
   workouts: WorkoutSummary[];
   exercises: Record<string, ExerciseLog[]>;
 }
+
+const sortedWaiting = (workouts: WorkoutSummary[]) =>
+  [...pendingWorkouts(workouts)].sort((a, b) => b.started_at.localeCompare(a.started_at));
 
 async function loadPage(offset: number): Promise<Page> {
   const workouts = await fetchRecentWorkouts(PAGE, offset);
@@ -32,7 +43,7 @@ export default function Train() {
   const router = useRouter();
   const active = useWorkout((s) => s.active);
   const start = useWorkout((s) => s.start);
-  const routines = useQuery(fetchRoutines, '', { cache: 'routines' });
+  const routines = useQuery(fetchRoutines, '', { cache: 'routines', overlay: routinesWithWaiting });
   // The whole history, a page at a time: the newest page reloads on focus, older pages load on scroll.
   const history = useQuery(
     async () => {
@@ -40,7 +51,7 @@ export default function Train() {
       return { ...page, total };
     },
     '',
-    { cache: 'history' }
+    { cache: 'history', overlay: (h) => ({ ...h, workouts: sortedWaiting(h.workouts) }) }
   );
   const [older, setOlder] = useState<Page>({ workouts: [], exercises: {} });
   const [loadingMore, setLoadingMore] = useState(false);

@@ -591,6 +591,11 @@ function Results({ result, onDone }: { result: FinishWorkoutResult; onDone: () =
           <AppText variant="hero" style={{ fontSize: 40, lineHeight: 44 }}>
             {prs.length ? `${prs.length} new PR${prs.length > 1 ? 's' : ''}` : 'Workout saved'}
           </AppText>
+          {result.waiting ? (
+            <AppText color="textMuted">
+              Saved on this phone. It will sync when you have a connection, and PRs will show then.
+            </AppText>
+          ) : null}
           <View style={styles.stats}>
             <StatPill label="Sets" value={String(result.total_sets)} />
             <StatPill label="Volume" value={formatVolume(Number(result.total_volume), units.weight)} />

@@ -134,4 +134,6 @@ export interface FinishWorkoutResult {
   total_volume: number;
   total_sets: number;
   prs: { exercise_id: string; name: string; e1rm: number; previous: number }[];
+  /** Saved on the phone and not yet on the server. */
+  waiting?: boolean;
 }

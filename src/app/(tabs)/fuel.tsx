@@ -12,10 +12,11 @@ import { useColors } from '@/components/ui/theme';
 import { SwipeDays } from '@/components/swipe-days';
 import { WeekCalendar } from '@/components/week-calendar';
 import { Space } from '@/constants/theme';
-import { fetchDay } from '@/lib/daily';
+import { fetchDay, withWaiting } from '@/lib/daily';
 import { toDay } from '@/lib/dates';
 import { MEALS } from '@/lib/nutrition';
-import { supabase } from '@/lib/supabase';
+import { enqueue } from '@/lib/outbox';
+import { newId } from '@/lib/outbox-core';
 import { useQuery } from '@/lib/use-query';
 import { useSession } from '@/stores/session';
 import type { FoodLog } from '@/types/db';
@@ -25,16 +26,15 @@ export default function Fuel() {
   const router = useRouter();
   const profile = useSession((s) => s.profile);
   const [day, setDay] = useState(toDay());
-  const q = useQuery(() => fetchDay(day), day, { cache: 'fuel' });
+  const q = useQuery(() => fetchDay(day), day, { cache: 'fuel', overlay: withWaiting });
   const [selected, setSelected] = useState<FoodLog | null>(null);
 
   if (!profile) return null;
   const t = q.data?.totals ?? { kcal: 0, protein: 0, carbs: 0, fat: 0 };
   const remaining = profile.calorie_target - Math.round(t.kcal);
 
-  async function remove(log: FoodLog) {
-    await supabase.from('food_logs').delete().eq('id', log.id);
-    q.reload();
+  function remove(log: FoodLog) {
+    enqueue({ kind: 'delete', table: 'food_logs', match: { id: log.id } });
   }
 
   return (
@@ -153,12 +153,10 @@ export default function Fuel() {
                   {
                     label: 'Log again today',
                     icon: 'repeat',
-                    onPress: async () => {
-                      const { id, created_at, ...rest } = selected;
-                      void id;
+                    onPress: () => {
+                      const { created_at, ...rest } = selected;
                       void created_at;
-                      await supabase.from('food_logs').insert({ ...rest, day: toDay() });
-                      q.reload();
+                      enqueue({ kind: 'insert', table: 'food_logs', values: { ...rest, id: newId(), day: toDay() } });
                     },
                   },
                   { label: 'Delete entry', icon: 'trash-outline', destructive: true, onPress: () => remove(selected) },

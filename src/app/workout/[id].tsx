@@ -17,6 +17,7 @@ import { useColors } from '@/components/ui/theme';
 import { Radius, Space, withAlpha } from '@/constants/theme';
 import { formatDuration } from '@/lib/dates';
 import { sessionValue } from '@/lib/history-stats';
+import { enqueue, isWaitingWorkout } from '@/lib/outbox';
 import { supabase } from '@/lib/supabase';
 import { formatVolume, useUnits, weightNumber } from '@/lib/units';
 import { useQuery } from '@/lib/use-query';
@@ -78,8 +79,8 @@ export default function WorkoutDetail() {
   const { data, error, reload } = useQuery(() => loadWorkout(id), id, { cache: 'workout' });
 
   function remove() {
-    const go = async () => {
-      await supabase.from('workouts').delete().eq('id', id);
+    const go = () => {
+      enqueue({ kind: 'delete', table: 'workouts', match: { id } });
       router.back();
     };
     const msg = 'This removes the workout and its sets from your history.';
@@ -94,8 +95,7 @@ export default function WorkoutDetail() {
   }
 
   async function rename(name: string) {
-    const { error: e } = await supabase.from('workouts').update({ name }).eq('id', id);
-    if (e) throw e;
+    enqueue({ kind: 'update', table: 'workouts', values: { name }, match: { id } });
     await reload();
   }
 
@@ -120,7 +120,11 @@ export default function WorkoutDetail() {
   if (!data) {
     return (
       <Screen padTop={false}>
-        {error ? (
+        {isWaitingWorkout(id) ? (
+          <AppText color="textMuted" align="center" style={{ paddingTop: Space.xl }}>
+            This workout is saved on your phone. Its details will show here once it has synced.
+          </AppText>
+        ) : error ? (
           <View style={{ gap: Space.md, alignItems: 'center', paddingTop: Space.xl }}>
             <AppText color="textMuted" align="center">
               Couldn&apos;t load this workout. {error}

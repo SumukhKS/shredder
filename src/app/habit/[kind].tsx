@@ -17,7 +17,7 @@ import { useColors } from '@/components/ui/theme';
 import { SwipeDays } from '@/components/swipe-days';
 import { WeekCalendar } from '@/components/week-calendar';
 import { Radius, Space } from '@/constants/theme';
-import { addWater, fetchDay, fetchHabitHistory, setWaterTotal, undoWater, type Habit } from '@/lib/daily';
+import { addWater, fetchDay, fetchHabitHistory, setWaterTotal, undoWater, type Habit, withWaiting } from '@/lib/daily';
 import { addDays, fromDay, mondayOf, toDay } from '@/lib/dates';
 import { HABITS, isHabit } from '@/lib/habits';
 import { backfillHealth, connectHealth, healthStatus, syncHealth, type HealthStatus } from '@/lib/health';
@@ -40,7 +40,7 @@ export default function HabitScreen() {
   const c = useColors();
   const { profile, session } = useSession();
   const [day, setDay] = useState(params.day ?? toDay());
-  const snap = useQuery(() => fetchDay(day), day);
+  const snap = useQuery(() => fetchDay(day), day, { overlay: withWaiting });
   const week = useQuery(() => fetchHabitHistory(kind, day), `${kind}${day}`);
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -84,7 +84,7 @@ export default function HabitScreen() {
 
   async function add(ml: number) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await addWater(day, ml);
+    addWater(day, ml);
     await saved();
   }
 
@@ -181,7 +181,7 @@ export default function HabitScreen() {
                 icon="arrow-undo"
                 variant="ghost"
                 onPress={async () => {
-                  await undoWater(day);
+                  undoWater(snap.data?.water ?? []);
                   await saved();
                 }}
               />
@@ -194,7 +194,7 @@ export default function HabitScreen() {
               max={15}
               initial={value ? String(Math.round(value / 10) / 100) : ''}
               onSave={async (litres) => {
-                await setWaterTotal(day, litres * 1000);
+                setWaterTotal(day, litres * 1000);
                 await saved();
               }}
             />

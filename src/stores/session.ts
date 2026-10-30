@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { create } from 'zustand';
 
+import { setOutboxUser } from '@/lib/outbox';
 import { supabase } from '@/lib/supabase';
 import { clearQueryCache } from '@/lib/use-query';
 import type { Profile } from '@/types/db';
@@ -94,3 +95,13 @@ export const useSession = create<SessionState>((set, get) => ({
     clearQueryCache();
   },
 }));
+
+// The offline queue belongs to whoever is signed in.
+let outboxUser: string | null = null;
+useSession.subscribe((state) => {
+  const id = state.session?.user.id ?? null;
+  if (id !== outboxUser) {
+    outboxUser = id;
+    setOutboxUser(id);
+  }
+});

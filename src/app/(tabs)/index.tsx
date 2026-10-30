@@ -27,7 +27,7 @@ import { Screen } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Radius, Space, withAlpha } from '@/constants/theme';
-import { fetchDay, fetchHabitHistory, type Habit } from '@/lib/daily';
+import { fetchDay, withWaiting, fetchHabitHistory, type Habit } from '@/lib/daily';
 import { greeting, toDay } from '@/lib/dates';
 import { HABITS } from '@/lib/habits';
 import { backfillHealth, syncHealthThrottled } from '@/lib/health';
@@ -81,7 +81,7 @@ export default function Today() {
   const [editing, setEditing] = useState(false);
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const today = toDay();
-  const day = useQuery(() => loadToday(today), today, { cache: 'today' });
+  const day = useQuery(() => loadToday(today), today, { cache: 'today', overlay: withWaiting });
   const week = useQuery(() => loadWeek(today), today, { cache: 'today-week' });
   const weeks = useQuery(fetchWorkoutWeeks, '', { cache: 'workout-weeks' });
   const userId = session?.user.id;

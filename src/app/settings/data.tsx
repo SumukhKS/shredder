@@ -9,6 +9,8 @@ import { Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { Space } from '@/constants/theme';
 import { toDay } from '@/lib/dates';
+import type { OutboxOp } from '@/lib/outbox-core';
+import { discardEntry, retryEntry, useOutboxVersion, waitingEntries } from '@/lib/outbox';
 import { supabase } from '@/lib/supabase';
 
 // Everything the user owns. Row-level security limits each to their own rows.
@@ -44,10 +46,28 @@ async function allRows(table: string) {
   }
 }
 
+function describeEntry(op: OutboxOp) {
+  if (op.kind === 'rpc') return op.name === 'finish_workout' ? 'A workout' : 'A workout edit';
+  const what: Record<string, string> = {
+    food_logs: 'A food entry',
+    water_logs: 'A water entry',
+    daily_health: 'Steps or sleep',
+    body_metrics: 'A measurement',
+    routines: 'A routine',
+    routine_exercises: 'A routine',
+    foods: 'A custom food',
+    exercises: 'A custom exercise',
+    workouts: 'A workout change',
+  };
+  return what[op.table] ?? 'An entry';
+}
+
 /** Settings > Import or export data. */
 export default function DataSettings() {
   const [exporting, setExporting] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  useOutboxVersion();
+  const refused = waitingEntries().filter((e) => e.failed);
 
   async function exportAll() {
     setExporting(true);
@@ -70,6 +90,18 @@ export default function DataSettings() {
 
   return (
     <Screen padTop={false}>
+      {refused.length ? <SectionHeader title="Needs attention" /> : null}
+      {refused.map((e) => (
+        <Card key={e.id} tone="flat" style={{ gap: Space.md }}>
+          <AppText variant="bodyBold">{describeEntry(e.op)}</AppText>
+          <AppText variant="small" color="textMuted">
+            Logged {new Date(e.createdAt).toLocaleString()}. The server refused it: {e.failed}
+          </AppText>
+          <Button label="Try again" variant="secondary" icon="refresh" onPress={() => retryEntry(e.id)} />
+          <Button label="Discard" variant="ghost" icon="trash-outline" onPress={() => discardEntry(e.id)} />
+        </Card>
+      ))}
+
       <SectionHeader title="Import" />
       <Card tone="flat" style={{ gap: Space.md }}>
         <AppText variant="small" color="textMuted">

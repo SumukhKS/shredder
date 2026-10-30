@@ -4,7 +4,8 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { toDay } from '@/lib/dates';
-import { supabase } from '@/lib/supabase';
+import { discardEntry, enqueue, trySend } from '@/lib/outbox';
+import { newId } from '@/lib/outbox-core';
 import { currentUnits, fromKg, toKg, type WeightUnit } from '@/lib/units';
 import { parseAmount, SET_LIMITS } from '@/lib/validate';
 import { beatsAll, e1rm, fetchBests, fetchPreviousSets, type ExerciseBest, type PreviousSet } from '@/lib/workouts';
@@ -48,6 +49,8 @@ export interface PrHit {
 }
 
 export interface ActiveWorkout {
+  /** Set on the first try at finishing, so retries can't log it twice. */
+  clientId?: string;
   name: string;
   routineId: string | null;
   startedAt: string;
@@ -416,20 +419,41 @@ export const useWorkout = create<WorkoutState>()(
           if (exercises.length === 0) throw new Error('Complete at least one set before finishing.');
 
           const finishedAt = new Date();
-          const { data, error } = await supabase.rpc('finish_workout', {
-            p: {
-              name: active.name.trim() || 'Workout',
-              routine_id: active.routineId,
-              day: toDay(new Date(active.startedAt)),
-              started_at: active.startedAt,
-              finished_at: finishedAt.toISOString(),
-              exercises,
+          // The same id on every try, so the server can't log this workout twice.
+          const clientId = active.clientId ?? newId();
+          set({ active: { ...active, clientId } });
+          const entry = enqueue({
+            kind: 'rpc',
+            name: 'finish_workout',
+            args: {
+              p: {
+                client_id: clientId,
+                name: active.name.trim() || 'Workout',
+                routine_id: active.routineId,
+                day: toDay(new Date(active.startedAt)),
+                started_at: active.startedAt,
+                finished_at: finishedAt.toISOString(),
+                exercises,
+              },
             },
           });
-          // On failure the workout stays on the device so nothing is lost; the user can retry.
-          if (error) throw new Error(error.message);
+          const sent = await trySend(entry, 6000);
+          if (sent.state === 'refused') {
+            // Something's wrong with the workout itself: it stays open to fix.
+            discardEntry(entry.id);
+            throw new Error(sent.reason);
+          }
           set({ active: null, rest: null });
-          return data as FinishWorkoutResult;
+          if (sent.state === 'sent') return sent.data as FinishWorkoutResult;
+          const done = exercises.flatMap((e) => e.sets).filter((s) => s.set_type !== 'warmup');
+          return {
+            workout_id: clientId,
+            xp: 0,
+            total_volume: done.reduce((v, s) => v + (s.weight_kg ?? 0) * (s.reps ?? 0), 0),
+            total_sets: done.length,
+            prs: [],
+            waiting: true,
+          };
         },
       };
     },

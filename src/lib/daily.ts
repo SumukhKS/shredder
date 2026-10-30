@@ -1,11 +1,16 @@
 import { addDays } from '@/lib/dates';
+import { enqueue, pendingWorkouts, waitingEntries } from '@/lib/outbox';
+import { applyPending, newId } from '@/lib/outbox-core';
 import { supabase } from '@/lib/supabase';
 import type { DailyHealth, FoodLog, WorkoutSummary } from '@/types/db';
 
 export interface DaySnapshot {
+  day: string;
   logs: FoodLog[];
   totals: { kcal: number; protein: number; carbs: number; fat: number };
   waterMl: number;
+  /** The day's drinks, oldest first. */
+  water: { id: string; ml: number; day?: string }[];
   health: DailyHealth | null;
   workedOut: boolean;
   workouts: WorkoutSummary[];
@@ -14,7 +19,7 @@ export interface DaySnapshot {
 export async function fetchDay(day: string): Promise<DaySnapshot> {
   const [logs, water, health, workouts] = await Promise.all([
     supabase.from('food_logs').select('*').eq('day', day).order('created_at'),
-    supabase.from('water_logs').select('ml').eq('day', day),
+    supabase.from('water_logs').select('id, ml').eq('day', day).order('created_at'),
     supabase.from('daily_health').select('day, steps, sleep_min, source').eq('day', day).maybeSingle(),
     supabase
       .from('workouts')
@@ -24,8 +29,19 @@ export async function fetchDay(day: string): Promise<DaySnapshot> {
   ]);
   if (logs.error) throw logs.error;
 
-  const rows = (logs.data ?? []) as FoodLog[];
-  const totals = rows.reduce(
+  return withTotals({
+    day,
+    logs: (logs.data ?? []) as FoodLog[],
+    water: (water.data ?? []) as DaySnapshot['water'],
+    health: (health.data as DailyHealth | null) ?? null,
+    workouts: (workouts.data ?? []) as WorkoutSummary[],
+  });
+}
+
+type DayRows = Pick<DaySnapshot, 'logs' | 'water' | 'health' | 'workouts'> & { day: string };
+
+function withTotals<T extends DayRows>(d: T): T & DaySnapshot {
+  const totals = d.logs.reduce(
     (t, l) => ({
       kcal: t.kcal + Number(l.kcal),
       protein: t.protein + Number(l.protein),
@@ -34,56 +50,59 @@ export async function fetchDay(day: string): Promise<DaySnapshot> {
     }),
     { kcal: 0, protein: 0, carbs: 0, fat: 0 }
   );
-
   return {
-    logs: rows,
+    ...d,
     totals,
-    waterMl: (water.data ?? []).reduce((s, w) => s + Number(w.ml), 0),
-    health: (health.data as DailyHealth | null) ?? null,
-    workedOut: (workouts.data ?? []).length > 0,
-    workouts: (workouts.data ?? []) as WorkoutSummary[],
+    waterMl: d.water.reduce((s, w) => s + Number(w.ml), 0),
+    workedOut: d.workouts.length > 0,
   };
 }
 
-export async function addWater(day: string, ml: number) {
-  const { error } = await supabase.from('water_logs').insert({ day, ml });
-  if (error) throw error;
+/** A loaded day with what's still waiting to be sent applied. For useQuery's `overlay`. */
+export function withWaiting<T extends DaySnapshot>(d: T): T {
+  const entries = waitingEntries();
+  if (entries.length === 0) return d;
+  const sameDay = (r: Record<string, unknown>) => r.day === d.day;
+  const health = applyPending(d.health ? [{ ...d.health }] : [], entries, 'daily_health', sameDay) as unknown as DailyHealth[];
+  return withTotals<T>({
+    ...d,
+    logs: applyPending(d.logs as unknown as Record<string, unknown>[], entries, 'food_logs', sameDay) as unknown as FoodLog[],
+    water: applyPending(d.water, entries, 'water_logs', sameDay),
+    health: health[0] ?? null,
+    workouts: pendingWorkouts(d.workouts, d.day),
+  });
+}
+
+export function addWater(day: string, ml: number) {
+  enqueue({ kind: 'insert', table: 'water_logs', values: { id: newId(), day, ml } });
 }
 
 /** Removes the most recent water entry for the day (undo for the quick-add buttons). */
-export async function undoWater(day: string) {
-  const { data } = await supabase
-    .from('water_logs')
-    .select('id')
-    .eq('day', day)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (data) await supabase.from('water_logs').delete().eq('id', data.id);
+export function undoWater(water: DaySnapshot['water']) {
+  const last = water[water.length - 1];
+  if (last) enqueue({ kind: 'delete', table: 'water_logs', match: { id: last.id } });
 }
 
 /** Replace the day's water with a single total (the logs are kept to 5 L per row). */
-export async function setWaterTotal(day: string, ml: number) {
-  const { error: delError } = await supabase.from('water_logs').delete().eq('day', day);
-  if (delError) throw delError;
-  const rows: { day: string; ml: number }[] = [];
-  for (let left = Math.round(ml); left > 0; left -= 5000) rows.push({ day, ml: Math.min(left, 5000) });
-  if (rows.length) {
-    const { error } = await supabase.from('water_logs').insert(rows);
-    if (error) throw error;
+export function setWaterTotal(day: string, ml: number) {
+  enqueue({ kind: 'delete', table: 'water_logs', match: { day } });
+  for (let left = Math.round(ml); left > 0; left -= 5000) {
+    enqueue({ kind: 'insert', table: 'water_logs', values: { id: newId(), day, ml: Math.min(left, 5000) } });
   }
 }
 
-export async function saveHealth(
+export function saveHealth(
   userId: string,
   day: string,
   patch: { steps?: number | null; sleep_min?: number | null },
   source: 'manual' | 'health_connect' = 'manual'
 ) {
-  const { error } = await supabase
-    .from('daily_health')
-    .upsert({ user_id: userId, day, ...patch, source, updated_at: new Date().toISOString() }, { onConflict: 'user_id,day' });
-  if (error) throw error;
+  enqueue({
+    kind: 'upsert',
+    table: 'daily_health',
+    values: { user_id: userId, day, ...patch, source, updated_at: new Date().toISOString() },
+    onConflict: 'user_id,day',
+  });
 }
 
 export type Habit = 'water' | 'steps' | 'sleep';
@@ -97,7 +116,11 @@ export async function fetchHabitHistory(habit: Habit, end: string, days = 7): Pr
     if (error) throw error;
     for (const r of data ?? []) totals[r.day] = (totals[r.day] ?? 0) + Number(r.ml);
   } else {
-    const { data, error } = await supabase.from('daily_health').select('day, steps, sleep_min').gte('day', span[0]).lte('day', end);
+    const { data, error } = await supabase
+      .from('daily_health')
+      .select('day, steps, sleep_min')
+      .gte('day', span[0])
+      .lte('day', end);
     if (error) throw error;
     for (const r of data ?? []) totals[r.day] = Number((habit === 'steps' ? r.steps : r.sleep_min) ?? 0);
   }

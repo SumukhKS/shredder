@@ -8,7 +8,11 @@ import type { Profile } from '@/types/db';
  * (any logged food, water, steps, sleep, weigh-in or workout counts for the day).
  */
 export async function refreshStreaks() {
-  await useSession.getState().refreshProfile();
+  // Only refreshes the numbers on screen, so no connection isn't a failure.
+  await useSession
+    .getState()
+    .refreshProfile()
+    .catch(() => null);
 }
 
 /** The daily streak as it stands today: it lapses once a whole day passes with nothing logged. */

@@ -1,5 +1,7 @@
 import { formatDuration } from '@/lib/dates';
 import type { ExerciseSession, HistorySet } from '@/lib/history-stats';
+import { enqueue, waitingEntries } from '@/lib/outbox';
+import { applyPending, newId } from '@/lib/outbox-core';
 import { supabase } from '@/lib/supabase';
 import type { Exercise, ExerciseKind, Routine, WorkoutSummary } from '@/types/db';
 import { weightNumber, type WeightUnit } from '@/lib/units';
@@ -253,28 +255,52 @@ export interface RoutineDraftExercise {
   rest_seconds: number;
 }
 
-export async function saveRoutine(params: { id?: string; name: string; exercises: RoutineDraftExercise[] }) {
-  let routineId = params.id;
-  if (routineId) {
-    const { error } = await supabase
-      .from('routines')
-      .update({ name: params.name, updated_at: new Date().toISOString() })
-      .eq('id', routineId);
-    if (error) throw error;
-    const { error: delError } = await supabase.from('routine_exercises').delete().eq('routine_id', routineId);
-    if (delError) throw delError;
+/** `shown` holds the exercises themselves, so the routine can be displayed before it has been sent. */
+export function saveRoutine(params: { id?: string; name: string; exercises: RoutineDraftExercise[]; shown: Exercise[] }) {
+  const routineId = params.id ?? newId();
+  const updated_at = new Date().toISOString();
+  if (params.id) {
+    enqueue({ kind: 'update', table: 'routines', values: { name: params.name, updated_at }, match: { id: routineId } });
+    enqueue({ kind: 'delete', table: 'routine_exercises', match: { routine_id: routineId } });
   } else {
-    const { data, error } = await supabase.from('routines').insert({ name: params.name }).select('id').single();
-    if (error) throw error;
-    routineId = data.id as string;
+    enqueue({ kind: 'insert', table: 'routines', values: { id: routineId, name: params.name, notes: null, updated_at } });
   }
   if (params.exercises.length) {
-    const { error } = await supabase
-      .from('routine_exercises')
-      .insert(params.exercises.map((e, i) => ({ ...e, routine_id: routineId, position: i + 1 })));
-    if (error) throw error;
+    enqueue(
+      {
+        kind: 'insert',
+        table: 'routine_exercises',
+        values: params.exercises.map((e, i) => ({ ...e, id: newId(), routine_id: routineId, position: i + 1 })),
+      },
+      { shown: params.shown }
+    );
   }
-  return routineId!;
+  return routineId;
+}
+
+/** Routines with what's still waiting to be sent applied. For useQuery's `overlay`. */
+export function routinesWithWaiting(routines: Routine[]): Routine[] {
+  const entries = waitingEntries();
+  if (entries.length === 0) return routines;
+  let out = applyPending(routines as unknown as Record<string, unknown>[], entries, 'routines') as unknown as Routine[];
+  for (const { op, failed, meta } of entries) {
+    if (failed) continue;
+    if (op.kind === 'delete' && op.table === 'routine_exercises') {
+      out = out.map((r) => (r.id === op.match.routine_id ? { ...r, routine_exercises: [] } : r));
+    } else if (op.kind === 'insert' && op.table === 'routine_exercises') {
+      const shown = (meta?.shown ?? []) as Exercise[];
+      const rows = (Array.isArray(op.values) ? op.values : [op.values]) as unknown as Routine['routine_exercises'];
+      out = out.map((r) => {
+        const mine = rows.filter((x) => (x as unknown as { routine_id: string }).routine_id === r.id);
+        if (mine.length === 0 || mine.every((m) => r.routine_exercises?.some((e) => e.id === m.id))) return r;
+        return {
+          ...r,
+          routine_exercises: mine.map((m) => ({ ...m, exercises: shown.find((e) => e.id === m.exercise_id) ?? null })),
+        } as Routine;
+      });
+    }
+  }
+  return out.map((r) => ({ ...r, routine_exercises: r.routine_exercises ?? [] }));
 }
 
 export const MUSCLE_LABELS: Record<string, string> = {

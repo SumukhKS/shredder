@@ -13,7 +13,8 @@ import { toDay } from '@/lib/dates';
 import { ensureFood, type FoodCandidate } from '@/lib/foods';
 import { macrosFor, MEALS } from '@/lib/nutrition';
 import { refreshStreaks } from '@/lib/streak';
-import { supabase } from '@/lib/supabase';
+import { enqueue } from '@/lib/outbox';
+import { newId } from '@/lib/outbox-core';
 import { parseAmount } from '@/lib/validate';
 import { useSession } from '@/stores/session';
 import type { Meal } from '@/types/db';
@@ -43,16 +44,23 @@ export default function AddFood() {
     setSaving(true);
     setError(null);
     try {
-      const row = await ensureFood(food, userId);
-      const { error } = await supabase.from('food_logs').insert({
-        day: params.day ?? toDay(),
-        meal,
-        food_id: row.id,
-        food_name: row.brand ? `${row.name} (${row.brand})` : row.name,
-        grams: Math.round(grams * 10) / 10,
-        ...m,
+      // A food from Open Food Facts is saved to the shared list first. Without a connection the log
+      // just keeps its name and numbers.
+      const row = await ensureFood(food, userId).catch(() => null);
+      const brand = row?.brand ?? food.brand;
+      enqueue({
+        kind: 'insert',
+        table: 'food_logs',
+        values: {
+          id: newId(),
+          day: params.day ?? toDay(),
+          meal,
+          food_id: row?.id ?? null,
+          food_name: brand ? `${food.name} (${brand})` : food.name,
+          grams: Math.round(grams * 10) / 10,
+          ...m,
+        },
       });
-      if (error) throw error;
       refreshStreaks();
       router.dismissTo('/fuel');
     } catch (e) {

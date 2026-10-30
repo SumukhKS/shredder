@@ -11,7 +11,8 @@ import { Field } from '@/components/ui/field';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Radius, Space } from '@/constants/theme';
-import { supabase } from '@/lib/supabase';
+import { enqueue, trySend } from '@/lib/outbox';
+import { newId } from '@/lib/outbox-core';
 import { useQuery } from '@/lib/use-query';
 import { fetchExercises, matchesSearch, MUSCLE_LABELS } from '@/lib/workouts';
 import { usePicker } from '@/stores/picker';
@@ -51,16 +52,18 @@ export default function ExercisePicker() {
   async function createCustom() {
     if (!userId || !query.trim()) return;
     setCreating(true);
-    const { data: row, error } = await supabase
-      .from('exercises')
-      .insert({ name: query.trim(), primary_muscle: muscle ?? 'other', equipment: 'other', created_by: userId })
-      .select('*')
-      .single();
+    const row = {
+      id: newId(),
+      name: query.trim(),
+      primary_muscle: muscle ?? 'other',
+      equipment: 'other',
+      created_by: userId,
+    };
+    const entry = enqueue({ kind: 'insert', table: 'exercises', values: row });
+    await trySend(entry, 6000);
     setCreating(false);
-    if (!error && row) {
-      await reload();
-      setSelected((s) => [...s, row as Exercise]);
-    }
+    setSelected((s) => [...s, { secondary_muscles: [], kind: 'weight_reps', ...row } as unknown as Exercise]);
+    reload();
   }
 
   return (

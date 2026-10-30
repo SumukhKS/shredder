@@ -1,6 +1,7 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
+import { onEntrySent, useOutboxVersion } from '@/lib/outbox';
 import { dataVersion } from '@/lib/supabase';
 
 /** Data older than this is fetched again when its screen comes back into view, even if nothing was written. */
@@ -9,8 +10,8 @@ const STALE_MS = 5 * 60_000;
 // Last data per cached query: in memory for tab switches, and on the device so a cold start shows
 // the previous screen straight away while the network catches up.
 // Bump the version when a cached screen's data changes shape.
-const PREFIX = 'shredder.q1.';
-const INDEX = 'shredder.q1.index';
+const PREFIX = 'shredder.q2.';
+const INDEX = 'shredder.q2.index';
 const memory = new Map<string, unknown>();
 
 function readCache<T>(id: string): T | null {
@@ -56,8 +57,15 @@ export function clearQueryCache() {
  *
  * With `cache` (a name unique to the screen's query; the data must be plain JSON), the last
  * result for that name and key is shown immediately, then refreshed.
+ *
+ * With `overlay`, entries still waiting to be sent are applied to whatever was last loaded, so what
+ * was logged offline shows straight away, and the screen reloads once they reach the server.
  */
-export function useQuery<T>(load: () => Promise<T>, key: string | number = '', options: { cache?: string } = {}) {
+export function useQuery<T>(
+  load: () => Promise<T>,
+  key: string | number = '',
+  options: { cache?: string; overlay?: (data: T) => T } = {}
+) {
   const cacheId = options.cache ? `${options.cache}|${key}` : null;
   const [data, setData] = useState<T | null>(() => (cacheId ? readCache<T>(cacheId) : null));
   const [error, setError] = useState<string | null>(null);
@@ -108,8 +116,15 @@ export function useQuery<T>(load: () => Promise<T>, key: string | number = '', o
     }, [run, key])
   );
 
+  const overlaid = !!options.overlay;
+  useEffect(() => {
+    if (!overlaid) return;
+    return onEntrySent(() => run(false, key));
+  }, [overlaid, run, key]);
+  useOutboxVersion();
+
   return {
-    data,
+    data: data != null && options.overlay ? options.overlay(data) : data,
     error,
     loading,
     refreshing,

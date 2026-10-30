@@ -12,7 +12,7 @@ import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Space } from '@/constants/theme';
 import { fromDay, toDay } from '@/lib/dates';
-import { fetchBodyMetrics, MEASURES, saveBodyMetrics, type Measure } from '@/lib/profile';
+import { fetchBodyMetrics, MEASURES, saveBodyMetrics, type Measure, metricsWithWaiting } from '@/lib/profile';
 import { refreshStreaks } from '@/lib/streak';
 import { fromCm, fromKg, toCm, toKg, useUnits, type LengthUnit, type WeightUnit } from '@/lib/units';
 import { useQuery } from '@/lib/use-query';
@@ -35,7 +35,7 @@ const unitOf = (kind: Kind, u: { weight: WeightUnit; length: LengthUnit }) =>
 export default function Measurements() {
   const c = useColors();
   const units = useUnits();
-  const q = useQuery(() => fetchBodyMetrics(365));
+  const q = useQuery(() => fetchBodyMetrics(365), '', { overlay: metricsWithWaiting });
   const [selected, setSelected] = useState<Measure>('waist_cm');
   const [logging, setLogging] = useState(false);
   const rows = q.data ?? [];
@@ -156,7 +156,7 @@ function LogSheet({ today, onClose, onSaved }: { today?: BodyMetric; onClose: ()
     setSaving(true);
     setError(null);
     try {
-      await saveBodyMetrics(userId, toDay(), out);
+      saveBodyMetrics(userId, toDay(), out);
       if (out.weight_kg) await refreshStreaks();
       onSaved();
     } catch (e) {

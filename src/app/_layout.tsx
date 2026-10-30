@@ -8,11 +8,13 @@ import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { useColors, useIsDark } from '@/components/ui/theme';
+import { SyncBanner } from '@/components/sync-banner';
 import { UpdateBanner } from '@/components/update-banner';
 import { Fonts } from '@/constants/theme';
 import { autoMergeExercises } from '@/lib/auto-merge';
 // Sets how reminders show while the app is open.
 import '@/lib/reminders';
+import { hasWaitingEntries } from '@/lib/outbox';
 import { useSession } from '@/stores/session';
 import { useWorkout } from '@/stores/workout';
 
@@ -47,7 +49,8 @@ export default function RootLayout() {
     if (!userId || !onboardedNow) return;
     // A little after launch, so it doesn't compete with the first screen for the network.
     const t = setTimeout(() => {
-      if (!useWorkout.getState().active) autoMergeExercises(userId).catch(() => {});
+      // Waiting entries may refer to a custom exercise that a merge would remove.
+      if (!useWorkout.getState().active && !hasWaitingEntries()) autoMergeExercises(userId).catch(() => {});
     }, 8000);
     return () => clearTimeout(t);
   }, [userId, onboardedNow]);
@@ -127,6 +130,7 @@ export default function RootLayout() {
           </Stack.Protected>
         </Stack>
         <UpdateBanner />
+        <SyncBanner />
       </ThemeProvider>
     </GestureHandlerRootView>
   );

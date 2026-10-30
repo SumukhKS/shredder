@@ -12,7 +12,7 @@ import { Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Space, withAlpha } from '@/constants/theme';
-import { fetchDay } from '@/lib/daily';
+import { fetchDay, withWaiting } from '@/lib/daily';
 import { addDays, firstOfMonth, formatDuration, fromDay, mondayOf, toDay } from '@/lib/dates';
 import { HABITS } from '@/lib/habits';
 import { supabase } from '@/lib/supabase';
@@ -66,7 +66,7 @@ export default function Calendar() {
   const [day, setDay] = useState(today);
   const [month, setMonth] = useState(firstOfMonth(today));
   const marks = useQuery(() => fetchMonth(month), month);
-  const summary = useQuery(() => fetchDaySummary(day), day);
+  const summary = useQuery(() => fetchDaySummary(day), day, { overlay: withWaiting });
   if (!profile) return null;
 
   // Six rows from the Monday on or before the 1st.

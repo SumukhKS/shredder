@@ -7,7 +7,8 @@ import { Field } from '@/components/ui/field';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Space } from '@/constants/theme';
-import { supabase } from '@/lib/supabase';
+import { discardEntry, enqueue, trySend } from '@/lib/outbox';
+import { newId } from '@/lib/outbox-core';
 import { cleanDecimal, foodProblem, parseAmount } from '@/lib/validate';
 import { useSession } from '@/stores/session';
 
@@ -52,25 +53,25 @@ export default function CustomFood() {
     if (problem) return setError(problem);
     setSaving(true);
     setError(null);
-    const { data, error } = await supabase
-      .from('foods')
-      .insert({
-        ...numbers,
-        brand: brand.trim() || null,
-        barcode: params.barcode || null,
-        source: 'custom',
-        serving_label: servingLabel.trim() || `${g} g`,
-        serving_g: g,
-        created_by: userId,
-      })
-      .select('*')
-      .single();
-    if (error) {
-      setError(error.message);
+    const food = {
+      ...numbers,
+      id: newId(),
+      brand: brand.trim() || null,
+      barcode: params.barcode || null,
+      source: 'custom' as const,
+      serving_label: servingLabel.trim() || `${g} g`,
+      serving_g: g,
+      created_by: userId,
+    };
+    const entry = enqueue({ kind: 'insert', table: 'foods', values: food });
+    const sent = await trySend(entry, 6000);
+    if (sent.state === 'refused') {
+      discardEntry(entry.id);
+      setError(sent.reason);
       setSaving(false);
       return;
     }
-    router.replace({ pathname: '/food/add', params: { food: JSON.stringify(data), day: params.day, meal: params.meal } });
+    router.replace({ pathname: '/food/add', params: { food: JSON.stringify(food), day: params.day, meal: params.meal } });
   }
 
   return (

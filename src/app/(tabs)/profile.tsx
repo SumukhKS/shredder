@@ -17,7 +17,7 @@ import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Space } from '@/constants/theme';
 import { addDays, formatDuration, fromDay, mondayOf, toDay } from '@/lib/dates';
-import { fetchBodyMetrics, fetchDashboard, fetchProfileTotals, MEASURES } from '@/lib/profile';
+import { fetchBodyMetrics, fetchDashboard, fetchProfileTotals, MEASURES, saveBodyMetrics } from '@/lib/profile';
 import { fetchWorkoutWeeks, refreshStreaks, weekStreaks } from '@/lib/streak';
 import { supabase } from '@/lib/supabase';
 import { formatLength, formatVolume, formatWeight, toKg, useUnits, weightNumber } from '@/lib/units';
@@ -289,10 +289,7 @@ export default function ProfileTab() {
         onSave={async (typed) => {
           const n = toKg(typed, u);
           if (n < 30 || n > 300) throw new Error(`Enter a weight between ${formatWeight(30, u)} and ${formatWeight(300, u)}.`);
-          const { error } = await supabase
-            .from('body_metrics')
-            .upsert({ user_id: profile.id, day: toDay(), weight_kg: Math.round(n * 10) / 10 }, { onConflict: 'user_id,day' });
-          if (error) throw error;
+          saveBodyMetrics(profile.id, toDay(), { weight_kg: Math.round(n * 10) / 10 });
           await q.reload();
           await refreshStreaks();
         }}

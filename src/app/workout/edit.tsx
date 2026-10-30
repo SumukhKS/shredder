@@ -17,6 +17,7 @@ import { WeekCalendar } from '@/components/week-calendar';
 import { Fonts, Radius, Space } from '@/constants/theme';
 import { fromDay, toDay } from '@/lib/dates';
 import { currentUnits, fromKg, toKg, type WeightUnit } from '@/lib/units';
+import { discardEntry, enqueue, trySend } from '@/lib/outbox';
 import { supabase } from '@/lib/supabase';
 import { usePicker } from '@/stores/picker';
 import type { Exercise, ExerciseKind, SetType } from '@/types/db';
@@ -203,12 +204,16 @@ export default function EditWorkout() {
     const end = new Date(begin.getTime() + secs * 1000);
     setSaving(true);
     setError(null);
-    const { error: e } = await supabase.rpc('update_workout', {
-      p: { id, name: name.trim(), day, started_at: begin.toISOString(), finished_at: end.toISOString(), exercises },
+    const entry = enqueue({
+      kind: 'rpc',
+      name: 'update_workout',
+      args: { p: { id, name: name.trim(), day, started_at: begin.toISOString(), finished_at: end.toISOString(), exercises } },
     });
-    if (e) {
+    const sent = await trySend(entry, 6000);
+    if (sent.state === 'refused') {
+      discardEntry(entry.id);
       setSaving(false);
-      return setError(e.message);
+      return setError(sent.reason);
     }
     router.back();
   }

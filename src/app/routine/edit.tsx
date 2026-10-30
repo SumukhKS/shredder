@@ -12,7 +12,7 @@ import { EmptyState, Screen } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Fonts, Space } from '@/constants/theme';
-import { supabase } from '@/lib/supabase';
+import { enqueue } from '@/lib/outbox';
 import { fetchRoutines, MUSCLE_LABELS, saveRoutine } from '@/lib/workouts';
 import { usePicker } from '@/stores/picker';
 import type { Exercise } from '@/types/db';
@@ -73,8 +73,7 @@ export default function RoutineEditor() {
   );
 
   const update = (k: string, patch: Partial<Row>) => setRows((r) => r.map((x) => (x.key === k ? { ...x, ...patch } : x)));
-  const reorder = (keys: string[]) =>
-    setRows((r) => keys.map((k) => r.find((x) => x.key === k)).filter((x): x is Row => !!x));
+  const reorder = (keys: string[]) => setRows((r) => keys.map((k) => r.find((x) => x.key === k)).filter((x): x is Row => !!x));
 
   async function save() {
     if (!name.trim()) return setError('Give the routine a name.');
@@ -82,9 +81,10 @@ export default function RoutineEditor() {
     setSaving(true);
     setError(null);
     try {
-      await saveRoutine({
+      saveRoutine({
         id,
         name: name.trim(),
+        shown: rows.map((r) => r.exercise),
         exercises: rows.map((r) => ({
           exercise_id: r.exercise.id,
           target_sets: r.sets,
@@ -100,8 +100,8 @@ export default function RoutineEditor() {
   }
 
   function remove() {
-    const go = async () => {
-      await supabase.from('routines').delete().eq('id', id!);
+    const go = () => {
+      enqueue({ kind: 'delete', table: 'routines', match: { id: id! } });
       router.back();
     };
     if (Platform.OS === 'web') {
@@ -119,7 +119,8 @@ export default function RoutineEditor() {
       padTop={false}
       scrollRef={scrollRef}
       footer={
-        <View style={[styles.footer, { backgroundColor: c.bg, borderColor: c.hairline, paddingBottom: insets.bottom + Space.lg }]}>
+        <View
+          style={[styles.footer, { backgroundColor: c.bg, borderColor: c.hairline, paddingBottom: insets.bottom + Space.lg }]}>
           <Button label="Save routine" size="lg" loading={saving} onPress={save} />
         </View>
       }>
@@ -127,7 +128,10 @@ export default function RoutineEditor() {
       <Field label="Name" value={name} onChangeText={setName} placeholder="Push day" error={error} />
 
       {rows.length === 0 ? (
-        <EmptyState title="Add your exercises" body="Pick the moves for this day. You can set target sets, reps and rest for each." />
+        <EmptyState
+          title="Add your exercises"
+          body="Pick the moves for this day. You can set target sets, reps and rest for each."
+        />
       ) : null}
 
       <Sortable
@@ -157,7 +161,9 @@ export default function RoutineEditor() {
             <View style={styles.row}>
               <Stepper label="Sets" value={r.sets} onChange={(v) => update(r.key, { sets: Math.min(10, Math.max(1, v)) })} />
               <View style={{ flex: 1, gap: 4 }}>
-                <AppText variant="small" color="textMuted">Reps</AppText>
+                <AppText variant="small" color="textMuted">
+                  Reps
+                </AppText>
                 <TextInput
                   value={r.reps}
                   onChangeText={(t) => update(r.key, { reps: t })}
@@ -203,7 +209,9 @@ function Stepper({
   const c = useColors();
   return (
     <View style={{ gap: 4 }}>
-      <AppText variant="small" color="textMuted">{label}</AppText>
+      <AppText variant="small" color="textMuted">
+        {label}
+      </AppText>
       <View style={[styles.stepper, { borderColor: c.hairline, backgroundColor: c.bg }]}>
         <IconButton icon="remove" size={18} label={`Fewer ${label}`} onPress={() => onChange(value - step)} />
         <AppText variant="bodyBold" style={{ minWidth: 34 }} align="center">
