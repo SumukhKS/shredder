@@ -5,5 +5,6 @@ preview_urls = false
 
 # Public values, the same ones the app ships with. Row-level security protects the data.
 [vars]
-SUPABASE_URL = "https://shredder-api.shredderfit.workers.dev"
+# The direct address: Cloudflare refuses a request from one workers.dev worker to another (the proxy).
+SUPABASE_URL = "https://nsclphbkzesbhzniignm.supabase.co"
 SUPABASE_PUBLISHABLE_KEY = "sb_publishable_8JpkVkwl8indMXRbaex41w_ZuDo7zLz"

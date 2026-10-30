@@ -6,7 +6,7 @@ const LATEST_APK = 'https://expo.dev/artifacts/eas/f2cXkNLJPk3q4IAhVsALUk2-B6NyQ
 const escapeHtml = (text) =>
   String(text ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 
-const page = (body) =>
+const page = (body, status = 200) =>
   new Response(
     `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Shredder</title><style>
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font-family:system-ui,sans-serif;padding:16px;box-sizing:border-box}
@@ -16,7 +16,14 @@ h1{font-size:28px;margin:16px 0 8px}p{color:#a1a1aa;line-height:1.5;margin:0 0 1
 .stats{display:flex;gap:12px;margin:24px 0}.stats div{flex:1;background:#1c1c1e;border-radius:16px;padding:16px}.stats b{display:block;font-size:28px}.stats span{color:#a1a1aa;font-size:14px}
 a.get{display:block;background:#ff5a1f;color:#000;font-weight:700;text-decoration:none;padding:16px;border-radius:16px}small{display:block;color:#a1a1aa;margin-top:12px}
 </style></head><body><main>${body}</main></body></html>`,
-    { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=300', 'x-robots-tag': 'noindex' } }
+    {
+      status,
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': status === 200 ? 'public, max-age=300' : 'no-store',
+        'x-robots-tag': 'noindex',
+      },
+    }
   );
 
 const DOWNLOAD = '<a class="get" href="/Shredder.apk">Download Shredder</a><small>Android only for now.</small>';
@@ -30,7 +37,8 @@ async function profilePage(shareId, env) {
     headers: { 'content-type': 'application/json', apikey: env.SUPABASE_PUBLISHABLE_KEY },
     body: JSON.stringify({ p_share: shareId }),
   });
-  const p = res.ok ? await res.json() : null;
+  if (!res.ok) return page(`<h1>Something went wrong</h1><p>This profile can't be shown right now. Try again soon.</p>${DOWNLOAD}`, 502);
+  const p = await res.json();
   if (!p) return notFound;
   const name = p.name || 'Athlete';
   const avatar = /^https:\/\//.test(p.avatar_url ?? '')
