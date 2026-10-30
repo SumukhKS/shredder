@@ -158,7 +158,10 @@ export default function Calendar() {
               const value = h === 'water' ? s.waterMl : h === 'steps' ? (s.health?.steps ?? 0) : (s.health?.sleep_min ?? 0);
               const target = meta.target(profile);
               return (
-                <Card key={h} style={styles.tile}>
+                <Card
+                  key={h}
+                  style={styles.tile}
+                  onPress={() => router.push({ pathname: '/habit/[kind]', params: { kind: h, day } })}>
                   <View style={styles.row}>
                     <Ionicons name={meta.icon} size={16} color={value > 0 ? c.primary : c.textMuted} />
                     <AppText variant="smallBold" color="textMuted">
@@ -174,7 +177,7 @@ export default function Calendar() {
             })}
           </View>
 
-          <Card style={{ gap: Space.md }}>
+          <Card style={{ gap: Space.md }} onPress={() => router.push({ pathname: '/food/day', params: { day } })}>
             <View style={styles.row}>
               <Ionicons name="restaurant" size={18} color={s.logs.length ? c.primary : c.textMuted} />
               <AppText variant="h3" style={{ flex: 1 }}>
@@ -218,7 +221,7 @@ export default function Calendar() {
           </Card>
 
           {s.weight?.weight_kg ? (
-            <Card style={styles.row}>
+            <Card style={styles.row} onPress={() => router.push('/measurements')}>
               <Ionicons name="scale" size={18} color={c.primary} />
               <AppText variant="h3" style={{ flex: 1 }}>
                 Weigh-in

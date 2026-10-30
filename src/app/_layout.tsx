@@ -106,6 +106,11 @@ export default function RootLayout() {
             <Stack.Screen name="exercise/match" options={{ title: 'Match to library', headerTransparent: false }} />
             <Stack.Screen name="exercise/[id]" options={{ presentation: 'modal', title: 'Exercise', headerTransparent: false }} />
             <Stack.Screen name="routine/edit" options={{ title: 'Routine', headerTransparent: false }} />
+            <Stack.Screen name="food/day" options={{ title: 'Food', headerTransparent: false }} />
+            <Stack.Screen
+              name="exercise/new"
+              options={{ presentation: 'modal', title: 'Create exercise', headerTransparent: false }}
+            />
             <Stack.Screen name="food/search" options={{ title: 'Log food', headerTransparent: false }} />
             <Stack.Screen name="food/add" options={{ presentation: 'modal', title: 'Add food', headerTransparent: false }} />
             <Stack.Screen name="food/scan" options={{ presentation: 'fullScreenModal', headerShown: false }} />

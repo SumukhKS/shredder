@@ -12,10 +12,7 @@ export function Chip({ label, selected, onPress }: { label: string; selected?: b
       accessibilityRole="button"
       accessibilityState={{ selected: !!selected }}
       onPress={onPress}
-      style={[
-        styles.chip,
-        { backgroundColor: selected ? c.text : c.surface, borderColor: selected ? c.text : c.hairline },
-      ]}>
+      style={[styles.chip, { backgroundColor: selected ? c.text : c.surface, borderColor: selected ? c.text : c.hairline }]}>
       <AppText variant="smallBold" color={selected ? 'bg' : 'text'}>
         {label}
       </AppText>
@@ -25,7 +22,12 @@ export function Chip({ label, selected, onPress }: { label: string; selected?: b
 
 export function ChipRow({ children }: { children: React.ReactNode }) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Space.sm, paddingHorizontal: Space.lg }}>
+    // In a column a horizontal scroll view would stretch or shrink, letting the list below overlap it.
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={{ flexGrow: 0, flexShrink: 0 }}
+      contentContainerStyle={{ gap: Space.sm, paddingHorizontal: Space.lg }}>
       {children}
     </ScrollView>
   );
