@@ -1,23 +1,33 @@
 import { useState } from 'react';
-import { Modal, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LineChart } from '@/components/charts';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Chip, ChipRow } from '@/components/ui/chips';
+import { Segmented } from '@/components/ui/chips';
 import { Field } from '@/components/ui/field';
-import { Screen, SectionHeader } from '@/components/ui/screen';
+import { EmptyState, Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Space } from '@/constants/theme';
-import { fromDay, toDay } from '@/lib/dates';
+import { addDays, fromDay, toDay } from '@/lib/dates';
 import { fetchBodyMetrics, MEASURES, saveBodyMetrics, type Measure, metricsWithWaiting } from '@/lib/profile';
 import { refreshStreaks } from '@/lib/streak';
+import { cleanDecimal } from '@/lib/validate';
 import { fromCm, fromKg, toCm, toKg, useUnits, type LengthUnit, type WeightUnit } from '@/lib/units';
 import { useQuery } from '@/lib/use-query';
 import { useSession } from '@/stores/session';
 import type { BodyMetric } from '@/types/db';
+
+type Range = '1m' | '3m' | '6m' | '1y' | 'all';
+const RANGES: { key: Range; label: string; days?: number }[] = [
+  { key: '1m', label: '1M', days: 30 },
+  { key: '3m', label: '3M', days: 91 },
+  { key: '6m', label: '6M', days: 182 },
+  { key: '1y', label: '1Y', days: 365 },
+  { key: 'all', label: 'All' },
+];
 
 type Kind = (typeof MEASURES)[number]['kind'];
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -35,61 +45,75 @@ const unitOf = (kind: Kind, u: { weight: WeightUnit; length: LengthUnit }) =>
 export default function Measurements() {
   const c = useColors();
   const units = useUnits();
-  const q = useQuery(() => fetchBodyMetrics(365), '', { overlay: metricsWithWaiting });
-  const [selected, setSelected] = useState<Measure>('waist_cm');
+  const q = useQuery(() => fetchBodyMetrics(1000), '', { cache: 'measurements', overlay: metricsWithWaiting });
+  const [range, setRange] = useState<Range>('3m');
   const [logging, setLogging] = useState(false);
   const rows = q.data ?? [];
-
-  const m = MEASURES.find((x) => x.key === selected)!;
-  const points = rows.filter((r) => r[selected] != null);
+  const from = RANGES.find((r) => r.key === range)?.days;
+  const since = from ? addDays(toDay(), -from) : '';
   const latestOf = (key: Measure) => [...rows].reverse().find((r) => r[key] != null);
-  const firstVal = points[0]?.[selected];
-  const lastVal = points[points.length - 1]?.[selected];
+  const logged = MEASURES.filter((x) => latestOf(x.key));
 
   return (
     <Screen padTop={false} refreshing={q.refreshing} onRefresh={q.refresh}>
       <Button label="Log measurements" icon="add" onPress={() => setLogging(true)} />
 
-      <SectionHeader title="Trend" />
-      <ChipRow>
-        {MEASURES.map((x) => (
-          <Chip key={x.key} label={x.label} selected={selected === x.key} onPress={() => setSelected(x.key)} />
-        ))}
-      </ChipRow>
-      <Card style={{ gap: Space.md }}>
-        {points.length ? (
-          <>
-            <View style={styles.row}>
-              <AppText variant="hero">{shown(m.kind, Number(lastVal), units)}</AppText>
-              <AppText variant="h3" color="textMuted">
-                {unitOf(m.kind, units)}
-              </AppText>
-              <View style={{ flex: 1 }} />
-              {points.length > 1 ? (
-                <AppText variant="bodyBold" color="accent">
-                  {Number(lastVal) - Number(firstVal) > 0 ? '+' : ''}
-                  {round1(shown(m.kind, Number(lastVal), units) - shown(m.kind, Number(firstVal), units))} since{' '}
-                  {fromDay(points[0].day).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
-                </AppText>
-              ) : null}
-            </View>
-            {points.length > 1 ? (
-              <LineChart
-                values={points.map((r) => shown(m.kind, Number(r[selected]), units))}
-                labels={points.map((r) => fromDay(r.day).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}
-                color={c.primary}
-                unit={` ${unitOf(m.kind, units)}`}
-              />
+      <SectionHeader title="Trends" />
+      <Segmented<Range> options={RANGES} value={range} onChange={setRange} />
+      {!q.data && q.error ? (
+        <EmptyState
+          title="Couldn't load your measurements"
+          body={q.error}
+          action={<Button label="Try again" variant="secondary" icon="refresh" onPress={q.reload} />}
+        />
+      ) : null}
+      {q.data && logged.length === 0 ? (
+        <EmptyState title="Nothing logged yet" body="Log a measurement and its trend shows up here." />
+      ) : null}
+      {logged.map((m) => {
+        const points = rows.filter((r) => r[m.key] != null && r.day >= since);
+        const first = points[0]?.[m.key];
+        const last = points[points.length - 1]?.[m.key];
+        return (
+          <Card key={m.key} style={{ gap: Space.md }}>
+            <AppText variant="h3">{m.label}</AppText>
+            {points.length ? (
+              <>
+                <View style={styles.row}>
+                  <AppText variant="stat">
+                    {shown(m.kind, Number(last), units)} {unitOf(m.kind, units)}
+                  </AppText>
+                  <View style={{ flex: 1 }} />
+                  {points.length > 1 ? (
+                    <AppText variant="smallBold" color="accent">
+                      {Number(last) - Number(first) > 0 ? '+' : ''}
+                      {round1(shown(m.kind, Number(last), units) - shown(m.kind, Number(first), units))} since{' '}
+                      {fromDay(points[0].day).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                    </AppText>
+                  ) : null}
+                </View>
+                {points.length > 1 ? (
+                  <LineChart
+                    values={points.map((r) => shown(m.kind, Number(r[m.key]), units))}
+                    labels={points.map((r) => fromDay(r.day).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}
+                    color={c.primary}
+                    height={200}
+                    unit={` ${unitOf(m.kind, units)}`}
+                  />
+                ) : (
+                  <AppText variant="small" color="textMuted">
+                    Measure again on another day to see the trend.
+                  </AppText>
+                )}
+              </>
             ) : (
               <AppText variant="small" color="textMuted">
-                Measure again on another day to see the trend.
+                Nothing logged in this period.
               </AppText>
             )}
-          </>
-        ) : (
-          <AppText color="textMuted">No {m.label.toLowerCase()} logged yet.</AppText>
-        )}
-      </Card>
+          </Card>
+        );
+      })}
 
       <SectionHeader title="Latest" />
       <Card tone="flat" style={{ gap: Space.sm }}>
@@ -168,7 +192,7 @@ function LogSheet({ today, onClose, onSaved }: { today?: BodyMetric; onClose: ()
 
   return (
     <Modal animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: Space.lg }}>
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top + Space.md }}>
         <View style={[styles.sheetHead, { paddingHorizontal: Space.lg }]}>
           <AppText variant="h2">Today&apos;s measurements</AppText>
           <Button label="Cancel" size="sm" variant="ghost" onPress={onClose} />
@@ -184,7 +208,7 @@ function LogSheet({ today, onClose, onSaved }: { today?: BodyMetric; onClose: ()
               key={m.key}
               label={m.label}
               value={values[m.key] ?? ''}
-              onChangeText={(v) => setValues((s) => ({ ...s, [m.key]: v }))}
+              onChangeText={(v) => setValues((s) => ({ ...s, [m.key]: cleanDecimal(v) }))}
               keyboardType="decimal-pad"
               suffix={unitOf(m.kind, units)}
             />
@@ -196,7 +220,7 @@ function LogSheet({ today, onClose, onSaved }: { today?: BodyMetric; onClose: ()
           ) : null}
           <Button label="Save" size="lg" loading={saving} onPress={save} />
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
