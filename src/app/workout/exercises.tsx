@@ -14,7 +14,7 @@ import { Radius, Space } from '@/constants/theme';
 import { enqueue, trySend } from '@/lib/outbox';
 import { newId } from '@/lib/outbox-core';
 import { useQuery } from '@/lib/use-query';
-import { fetchExercises, matchesSearch, MUSCLE_LABELS } from '@/lib/workouts';
+import { exercisesWithWaiting, fetchExerciseLibrary, matchesSearch, MUSCLE_LABELS } from '@/lib/workouts';
 import { usePicker } from '@/stores/picker';
 import { useSession } from '@/stores/session';
 import { useWorkout } from '@/stores/workout';
@@ -28,7 +28,7 @@ export default function ExercisePicker() {
   const addToWorkout = useWorkout((s) => s.addExercises);
   const setPicked = usePicker((s) => s.set);
   const userId = useSession((s) => s.session?.user.id);
-  const { data, reload, error, loading } = useQuery(fetchExercises, '', { cache: 'exercises' });
+  const { data, reload, error, loading } = useQuery(fetchExerciseLibrary, '', { overlay: exercisesWithWaiting });
   const [query, setQuery] = useState('');
   const [muscle, setMuscle] = useState<string | null>(null);
   const [selected, setSelected] = useState<Exercise[]>([]);

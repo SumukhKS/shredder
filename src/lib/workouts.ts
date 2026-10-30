@@ -1,5 +1,6 @@
 import { formatDuration } from '@/lib/dates';
 import type { ExerciseSession, HistorySet } from '@/lib/history-stats';
+import { readCache, writeCache } from '@/lib/use-query';
 import { enqueue, waitingEntries } from '@/lib/outbox';
 import { applyPending, newId } from '@/lib/outbox-core';
 import { supabase } from '@/lib/supabase';
@@ -104,6 +105,37 @@ export async function fetchExercises(): Promise<Exercise[]> {
     out.push(...((data ?? []) as Exercise[]));
     if (!data || data.length < PAGE) return out;
   }
+}
+
+/**
+ * The library for browsing and picking. It rarely changes and is over 1,000 rows, so the copy on the
+ * device is used unless a small request shows something changed. Works offline from that copy.
+ */
+export async function fetchExerciseLibrary(): Promise<Exercise[]> {
+  // Let the screen appear before reading and parsing the stored copy.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const stored = readCache<{ signature: string; rows: Exercise[] }>('library');
+  const { data, count, error } = await supabase
+    .from('exercises')
+    .select('created_at', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (error) {
+    if (stored) return stored.rows;
+    throw error;
+  }
+  const signature = `${count}|${data?.[0]?.created_at ?? ''}`;
+  if (stored?.signature === signature) return stored.rows;
+  const rows = await fetchExercises();
+  writeCache('library', { signature, rows });
+  return rows;
+}
+
+/** The library with custom exercises still waiting to be sent. For useQuery's `overlay`. */
+export function exercisesWithWaiting(rows: Exercise[]): Exercise[] {
+  const entries = waitingEntries();
+  if (!entries.some((e) => e.op.kind === 'insert' && e.op.table === 'exercises')) return rows;
+  return applyPending(rows as unknown as Record<string, unknown>[], entries, 'exercises') as unknown as Exercise[];
 }
 
 /** Search that matches every word in any order: "press bench dumbbell" finds "Bench Press (Dumbbell)". */

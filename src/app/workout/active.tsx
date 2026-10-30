@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Animated, { FadeInDown, useAnimatedRef, ZoomIn } from 'react-native-reanimated';
@@ -263,7 +263,7 @@ function RestTimer() {
 function RestCountdown({ rest }: { rest: NonNullable<ReturnType<typeof useWorkout.getState>['rest']> }) {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { adjustRest, skipRest } = useWorkout();
+  const { adjustRest, skipRest } = useWorkout.getState();
   const now = useNow();
   const restLeft = Math.ceil((rest.endsAt - now) / 1000);
   const firedRef = useRef<number | null>(null);
@@ -340,9 +340,19 @@ function previousText(kind: ExerciseKind, unit: WeightUnit, p?: PreviousSet) {
 
 const exerciseKey = (ex: ActiveExercise) => ex.key;
 
-function ExerciseBlock({ ex, unit, handle }: { ex: ActiveExercise; unit: WeightUnit; handle: React.ReactNode }) {
+// Memoised: typing in a set redraws that exercise, not every exercise in the workout.
+const ExerciseBlock = memo(function ExerciseBlock({
+  ex,
+  unit,
+  handle,
+}: {
+  ex: ActiveExercise;
+  unit: WeightUnit;
+  handle: React.ReactNode;
+}) {
   const c = useColors();
-  const w = useWorkout();
+  // Actions only, so changes elsewhere in the workout don't redraw this block.
+  const w = useWorkout.getState();
   const router = useRouter();
   const cols = columnsFor(ex.exercise.kind, unit);
   const showHowTo = () => router.push({ pathname: '/exercise/[id]', params: { id: ex.exercise.id } });
@@ -463,7 +473,7 @@ function ExerciseBlock({ ex, unit, handle }: { ex: ActiveExercise; unit: WeightU
       />
     </Card>
   );
-}
+});
 
 const SET_TYPES: [ActiveSet['setType'], string][] = [
   ['normal', 'Normal set'],

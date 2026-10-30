@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -100,11 +100,11 @@ export function Sortable<T>({
     slots.value = rects;
   });
 
-  function begin(key: string) {
-    setDragging(key);
-    onDragStart?.(key);
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }
+  // The latest props, for handlers that must stay the same function across renders (see `Item`).
+  const latest = useRef({ onDragStart, onReorder, keyString });
+  useLayoutEffect(() => {
+    latest.current = { onDragStart, onReorder, keyString };
+  });
 
   function moveOver(key: string, target: string) {
     const o = orderRef.current;
@@ -119,13 +119,8 @@ export function Sortable<T>({
     if (Platform.OS !== 'web') Haptics.selectionAsync();
   }
 
-  function finish() {
-    setDragging(null);
-    if (orderRef.current.join('|') !== keyString) onReorder(orderRef.current);
-  }
-
   // Each frame while something is held: scroll near the edges, and swap with whatever is underneath.
-  useFrameCallback(() => {
+  const frame = useFrameCallback(() => {
     const key = activeKey.value;
     if (!key) return;
     if (canScroll) {
@@ -150,9 +145,26 @@ export function Sortable<T>({
       hovered.value = hit;
       if (hit) scheduleOnRN(moveOver, key, hit);
     }
-  });
+  }, false);
 
-  const shared = { slots, activeKey, hovered, origin, tx, ty, fingerY, startScroll, scroll };
+  const begin = useCallback(
+    (key: string) => {
+      frame.setActive(true);
+      setDragging(key);
+      latest.current.onDragStart?.(key);
+      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    },
+    [frame]
+  );
+
+  const finish = useCallback(() => {
+    frame.setActive(false);
+    setDragging(null);
+    if (orderRef.current.join('|') !== latest.current.keyString) latest.current.onReorder(orderRef.current);
+  }, [frame]);
+
+  // Shared values never change identity, so one object lasts the list's lifetime.
+  const [shared] = useState(() => ({ slots, activeKey, hovered, origin, tx, ty, fingerY, startScroll, scroll }));
 
   return (
     <View
@@ -234,43 +246,55 @@ function Item({
     }
   }, [rect.x, rect.y, measured, id, x, y, placed, activeKey]);
 
-  const pan = Gesture.Pan()
-    .enabled(enabled)
-    .maxPointers(1)
-    .onStart((e) => {
-      const slot = slots.get()[id];
-      origin.set({ x: x.get(), y: y.get(), w: slot?.w ?? 0, h: slot?.h ?? 0 });
-      tx.set(0);
-      ty.set(0);
-      fingerY.set(e.absoluteY);
-      startScroll.set(scroll.get());
-      hovered.set(null);
-      activeKey.set(id);
-      lift.set(withTiming(1, { duration: 140 }));
-      scheduleOnRN(onBegin, id);
-    })
-    .onUpdate((e) => {
-      tx.set(e.translationX);
-      ty.set(e.translationY);
-      fingerY.set(e.absoluteY);
-    })
-    .onFinalize(() => {
-      if (activeKey.get() !== id) return;
-      const o = origin.get();
-      x.set(o.x + tx.get());
-      y.set(o.y + ty.get() + (scroll.get() - startScroll.get()));
-      activeKey.set(null);
-      const slot = slots.get()[id];
-      if (slot) {
-        x.set(withSpring(slot.x, settle));
-        y.set(withSpring(slot.y, settle));
-      }
-      lift.set(withTiming(0, { duration: 180 }));
-      scheduleOnRN(onFinish);
-    });
-  // Holding anywhere waits a moment so the screen can still scroll; a handle grabs on touch, before any scroll starts.
-  if (mode === 'hold') pan.activateAfterLongPress(HOLD_MS);
-  else pan.minDistance(0);
+  // The same gesture across renders: rebuilding it mid-drag (the drag itself causes a render) can cancel it.
+  const pan = useMemo(() => {
+    const gesture = Gesture.Pan()
+      .enabled(enabled)
+      .maxPointers(1)
+      .onStart((e) => {
+        const slot = slots.get()[id];
+        origin.set({ x: x.get(), y: y.get(), w: slot?.w ?? 0, h: slot?.h ?? 0 });
+        tx.set(0);
+        ty.set(0);
+        fingerY.set(e.absoluteY);
+        startScroll.set(scroll.get());
+        hovered.set(null);
+        activeKey.set(id);
+        lift.set(withTiming(1, { duration: 140 }));
+        scheduleOnRN(onBegin, id);
+      })
+      .onUpdate((e) => {
+        tx.set(e.translationX);
+        ty.set(e.translationY);
+        fingerY.set(e.absoluteY);
+      })
+      .onFinalize(() => {
+        if (activeKey.get() !== id) return;
+        const o = origin.get();
+        x.set(o.x + tx.get());
+        y.set(o.y + ty.get() + (scroll.get() - startScroll.get()));
+        activeKey.set(null);
+        const slot = slots.get()[id];
+        if (slot) {
+          x.set(withSpring(slot.x, settle));
+          y.set(withSpring(slot.y, settle));
+        }
+        lift.set(withTiming(0, { duration: 180 }));
+        scheduleOnRN(onFinish);
+      });
+    // Holding anywhere waits a moment so the screen can still scroll; a handle grabs on touch, before any scroll starts.
+    return mode === 'hold' ? gesture.activateAfterLongPress(HOLD_MS) : gesture.minDistance(0);
+  }, [id, enabled, mode, onBegin, onFinish, slots, origin, tx, ty, fingerY, startScroll, scroll, hovered, activeKey, lift, x, y]);
+
+  const handle = useMemo(
+    () =>
+      mode === 'handle' ? (
+        <GestureDetector gesture={pan}>
+          <DragGrip />
+        </GestureDetector>
+      ) : null,
+    [mode, pan]
+  );
 
   const style = useAnimatedStyle(() => {
     const held = activeKey.value === id;
@@ -290,13 +314,7 @@ function Item({
     <Animated.View
       style={[{ position: 'absolute', left: 0, top: 0, width: rect.w, shadowColor: '#000', shadowRadius: 16 }, style]}
       onLayout={(e) => onHeight(Math.round(e.nativeEvent.layout.height))}>
-      {render(
-        mode === 'handle' ? (
-          <GestureDetector gesture={pan}>
-            <DragGrip />
-          </GestureDetector>
-        ) : null
-      )}
+      {render(handle)}
     </Animated.View>
   );
   return mode === 'hold' ? <GestureDetector gesture={pan}>{body}</GestureDetector> : body;

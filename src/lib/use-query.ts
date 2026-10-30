@@ -14,7 +14,7 @@ const PREFIX = 'shredder.q2.';
 const INDEX = 'shredder.q2.index';
 const memory = new Map<string, unknown>();
 
-function readCache<T>(id: string): T | null {
+export function readCache<T>(id: string): T | null {
   if (memory.has(id)) return memory.get(id) as T;
   try {
     const raw = localStorage.getItem(PREFIX + id);
@@ -27,7 +27,7 @@ function readCache<T>(id: string): T | null {
   }
 }
 
-function writeCache(id: string, value: unknown) {
+export function writeCache(id: string, value: unknown) {
   memory.set(id, value);
   // Off the render path: the write is a synchronous SQLite call.
   setTimeout(() => {

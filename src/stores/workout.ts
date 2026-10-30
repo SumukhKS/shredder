@@ -1,6 +1,7 @@
 import 'expo-sqlite/localStorage/install';
 
 import { create } from 'zustand';
+import { AppState } from 'react-native';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { toDay } from '@/lib/dates';
@@ -87,6 +88,33 @@ interface WorkoutState {
   discard: () => void;
   finish: () => Promise<FinishWorkoutResult>;
 }
+
+// Saving the whole workout is a synchronous SQLite write, too slow for every keystroke. Writes wait
+// for a pause in typing, and anything still waiting is saved as soon as the app leaves the screen.
+const SAVE_DELAY_MS = 500;
+let unsaved: { key: string; value: string } | null = null;
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function saveNow() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = null;
+  if (unsaved) localStorage.setItem(unsaved.key, unsaved.value);
+  unsaved = null;
+}
+
+const delayedStorage = {
+  getItem: (key: string) => localStorage.getItem(key),
+  setItem: (key: string, value: string) => {
+    unsaved = { key, value };
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveNow, SAVE_DELAY_MS);
+  },
+  removeItem: (key: string) => localStorage.removeItem(key),
+};
+
+AppState.addEventListener('change', (state) => {
+  if (state !== 'active') saveNow();
+});
 
 let counter = 0;
 const uid = () => `${Date.now().toString(36)}-${(counter++).toString(36)}`;
@@ -459,7 +487,7 @@ export const useWorkout = create<WorkoutState>()(
     },
     {
       name: 'shredder-active-workout',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => delayedStorage),
       partialize: (s) => ({ active: s.active, rest: s.rest }),
     }
   )
