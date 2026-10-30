@@ -1,5 +1,6 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Modal, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -87,6 +88,7 @@ export default function Measurements() {
   return (
     <Screen padTop={false} refreshing={q.refreshing} onRefresh={q.refresh}>
       <Button label="Log measurements" icon="add" onPress={() => setLogging(true)} />
+      <Button label="Progress photos" icon="camera-outline" variant="secondary" onPress={() => router.push('/progress')} />
       <Button label="Import from CSV" icon="document-outline" variant="secondary" onPress={chooseCsv} />
       {notice ? (
         <AppText variant="small" color="textMuted">
