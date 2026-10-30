@@ -380,4 +380,79 @@ assert(await rejected(U, `insert into body_metrics (user_id, day, weight_kg) val
 assert(await rejected(U, `insert into food_logs (user_id, day, meal, food_name, grams, kcal, protein, carbs, fat) values ($1, '2026-01-01', 'lunch', 'x', 0, 0, 0, 0, 0)`, [U]),
   'logging 0 g of a food is refused');
 
+// Sending the same workout twice logs it once
+const cid = 'aaaaaaaa-0000-4000-8000-000000000001';
+const before = (await one(U, `select count(*)::int as n from workouts`)).n;
+const firstSend = (await one(U, `select finish_workout($1::jsonb) as r`, [JSON.stringify({ ...payload('2026-03-02', 60), client_id: cid })])).r;
+const secondSend = (await one(U, `select finish_workout($1::jsonb) as r`, [JSON.stringify({ ...payload('2026-03-02', 60), client_id: cid })])).r;
+assert(secondSend.workout_id === firstSend.workout_id && secondSend.already_saved === true, 'a retried workout returns the first one');
+assert((await one(U, `select count(*)::int as n from workouts`)).n === before + 1, 'a retried workout is logged once');
+const otherUser = (await one(V, `select finish_workout($1::jsonb) as r`, [JSON.stringify({ ...payload('2026-03-02', 60), client_id: cid })])).r;
+assert(otherUser.workout_id !== firstSend.workout_id, "another user's id never returns someone else's workout");
+
+// Profile numbers past the 1,000-row limit
+await db.exec(`
+  insert into workouts (user_id, name, day, started_at, finished_at, total_volume, total_sets)
+  select '${V}', 'Bulk', d::date, d, d + interval '1 hour', 100, 3
+  from generate_series(timestamptz '2020-01-01', timestamptz '2020-01-01' + interval '1199 days', interval '1 day') d`);
+const vStats = (await one(V, `select profile_stats('2023-04-14') as s`)).s;
+assert(vStats.workouts === 1201, `profile_stats counts all workouts past 1,000 rows (${vStats.workouts})`);
+assert(vStats.days.length <= 370 && vStats.days.every((d) => d.day <= '2023-04-14'), 'profile_stats days stay in the last 370 days');
+assert(vStats.weeks[0] >= vStats.weeks[vStats.weeks.length - 1], 'profile_stats weeks are newest first');
+const uStats = (await one(U, `select profile_stats('2023-04-14') as s`)).s;
+assert(uStats.workouts < 1000, "profile_stats never counts another user's workouts");
+
+// Food search ranks your own foods first and treats search characters as plain text
+await as(U, `insert into foods (name, source, kcal_100g, protein_100g, carbs_100g, fat_100g, created_by) values ('Zzqx oats mine', 'custom', 389, 17, 66, 7, '${U}')`);
+await as(V, `insert into foods (name, source, kcal_100g, protein_100g, carbs_100g, fat_100g, created_by) values ('Zzqx oats theirs', 'custom', 389, 17, 66, 7, '${V}')`);
+await db.exec(`insert into foods (name, source, kcal_100g, protein_100g, carbs_100g, fat_100g) values ('Zzqx oats verified', 'usda', 389, 17, 66, 7)`);
+const ranked = (await as(U, `select name from search_foods('oats zzqx')`)).rows.map((r) => r.name);
+assert(ranked.join() === 'Zzqx oats mine,Zzqx oats verified,Zzqx oats theirs', `search ranks own, verified, community (${ranked})`);
+assert((await as(U, `select name from search_foods('%')`)).rows.every((r) => r.name.includes('%')), 'a % in a search is plain text');
+assert((await as(U, `select name from search_foods('   ')`)).rows.length === 0, 'a blank search finds nothing');
+
+// Your own foods can be deleted; other people's can't
+await as(V, `delete from foods where name = 'Zzqx oats mine'`);
+assert((await one(U, `select count(*)::int as n from foods where name = 'Zzqx oats mine'`)).n === 1, "another user can't delete your food");
+await as(U, `delete from foods where name = 'Zzqx oats mine'`);
+assert((await one(U, `select count(*)::int as n from foods where name = 'Zzqx oats mine'`)).n === 0, 'you can delete your own food');
+
+// Recipes are private
+const recipe = (await one(U, `insert into recipes (name, servings) values ('Dal', 4) returning id`)).id;
+await as(U, `insert into recipe_items (recipe_id, food_name, grams, kcal) values ($1, 'Lentils', 200, 700)`, [recipe]);
+assert((await as(V, `select * from recipes`)).rows.length === 0 && (await as(V, `select * from recipe_items`)).rows.length === 0, "another user can't see your recipe");
+assert(await rejected(V, `insert into recipe_items (recipe_id, food_name, grams, kcal) values ($1, 'Stolen', 1, 1)`, [recipe]), "another user can't add to your recipe");
+assert(await rejected(U, `insert into recipes (name) values ('   ')`), 'a blank recipe name is refused');
+assert(await rejected(U, `insert into recipes (name, servings) values ('x', 0)`), 'zero servings is refused');
+
+// Share page: only the allowed fields, by share id, for anyone
+const { share_id } = await one(U, `select share_id from profiles where id = '${U}'`);
+await db.exec(`set role anon`);
+const shared = (await db.query(`select public_profile($1) as p`, [share_id])).rows[0].p;
+const missing = (await db.query(`select public_profile('00000000-0000-4000-8000-000000000000') as p`)).rows[0].p;
+let anonRead = false;
+try { anonRead = (await db.query(`select * from profiles`)).rows.length > 0; } catch {}
+await db.exec(`reset role`);
+assert(Object.keys(shared).sort().join() === 'avatar_url,bio,name,week_streak,workouts', `public_profile returns only allowed fields (${Object.keys(shared)})`);
+assert(missing === null, 'an unknown share id finds nothing');
+assert(!anonRead, 'logged-out visitors still cannot read profiles');
+
+// Progress photos live in your own folder
+const photo = `${U}/a.jpg`;
+await as(U, `insert into progress_photos (day, path) values ('2026-01-01', $1)`, [photo]);
+assert(await rejected(U, `insert into progress_photos (day, path) values ('2026-01-01', $1)`, [`${V}/b.jpg`]), "a photo can't point at another user's folder");
+assert((await as(V, `select * from progress_photos`)).rows.length === 0, "another user can't see your photos");
+
+// Routine set rows
+await db.exec(`
+  insert into routines (id, user_id, name) values ('bbbbbbbb-0000-4000-8000-000000000001', '${U}', 'Old');
+  insert into routine_exercises (routine_id, exercise_id, position, target_sets, target_reps, set_targets)
+  values ('bbbbbbbb-0000-4000-8000-000000000001', '${bench}', 1, 3, '8-12', '[{"reps":8},{"reps":8},{"reps":8}]')`);
+assert(await rejected(U, `update routine_exercises set set_targets = '{"reps":8}'`), 'set targets must be a list');
+
+// Tour and sources
+await as(U, `update profiles set tour_seen = true where id = '${U}'`);
+assert((await one(U, `select tour_seen from profiles`)).tour_seen === true, 'you can mark the tour as seen');
+await db.exec(`insert into daily_health (user_id, day, steps, source) values ('${U}', '2026-01-05', 100, 'phone_sensor')`);
+
 console.log('\nAll SQL checks passed.');
