@@ -14,7 +14,7 @@ const hourLabel = (h: number) => (h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 
 const clockTime = (t: number) => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 const hm = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h ${min % 60}m` : `${min}m`);
 
-/** Steps through the day, an hour per bar, from Health Connect. */
+/** Steps through the day, an hour per bar. */
 export function StepsByHour({ day }: { day: string }) {
   const c = useColors();
   const q = useQuery(() => stepsByHour(day), day);
@@ -79,8 +79,8 @@ export function SleepStages({ day }: { day: string }) {
     return (
       <Card tone="flat">
         <AppText variant="small" color="textMuted">
-          No sleep from a device for this night. Deep, light and REM sleep appear here when your watch or app shares
-          sleep with Health Connect.
+          No sleep from a device for this night. Deep, light and REM sleep appear here when your watch or app shares sleep with
+          Health Connect.
         </AppText>
       </Card>
     );
@@ -148,8 +148,8 @@ export function SleepStages({ day }: { day: string }) {
         </>
       ) : (
         <AppText variant="small" color="textMuted">
-          {hm(night.minutes.asleep)} asleep. Your device recorded this night without stages; watches like Fitbit, Galaxy
-          Watch and Pixel Watch add deep, light and REM sleep.
+          {hm(night.minutes.asleep)} asleep. Your device recorded this night without stages; watches like Fitbit, Galaxy Watch and
+          Pixel Watch add deep, light and REM sleep.
         </AppText>
       )}
     </Card>

@@ -1,13 +1,17 @@
 import { Platform } from 'react-native';
 
 import { addDays, fromDay, toDay } from '@/lib/dates';
+import { sensorStepsByDay, sensorStepsByHour } from '@/lib/step-sensor';
 import { supabase } from '@/lib/supabase';
+import { useAppSettings } from '@/stores/app-settings';
 
 /**
  * Steps and sleep from Android Health Connect. Fitbit, Samsung Health, Google Fit,
  * Garmin, Mi Fitness and most watches write into Health Connect, so reading it
  * covers all of them without a separate login for each.
  */
+const usesPhoneSensor = () => useAppSettings.getState().stepsSource === 'phone_sensor';
+
 export type HealthStatus = 'unsupported' | 'not_installed' | 'needs_update' | 'disconnected' | 'connected';
 
 const PERMISSIONS = [
@@ -117,6 +121,7 @@ async function sleepByDay(from: string, to: string): Promise<Record<string, numb
 
 /** Steps in each hour of a local day (24 values), or null when Health Connect isn't connected. */
 export async function stepsByHour(day: string): Promise<number[] | null> {
+  if (usesPhoneSensor()) return sensorStepsByHour(day);
   if ((await healthStatus()) !== 'connected') return null;
   const { aggregateGroupByDuration } = await hc();
   const start = fromDay(day);
@@ -190,11 +195,14 @@ export async function sleepNight(day: string): Promise<SleepNight | null> {
  * data from up to 30 days before Shredder was first connected. Quietly does nothing if not connected.
  */
 export async function syncHealth(userId: string, to: string, days = 7): Promise<boolean> {
-  if ((await healthStatus()) !== 'connected') return false;
+  const phone = usesPhoneSensor();
+  const connected = (await healthStatus()) === 'connected';
+  if (!connected && !phone) return false;
   const from = addDays(to, -(days - 1));
+  const none = {} as Record<string, number>;
   const [steps, sleep, existing] = await Promise.all([
-    stepsByDay(from, to).catch(() => ({}) as Record<string, number>),
-    sleepByDay(from, to).catch(() => ({}) as Record<string, number>),
+    phone ? sensorStepsByDay() : stepsByDay(from, to).catch(() => none),
+    connected ? sleepByDay(from, to).catch(() => none) : none,
     supabase.from('daily_health').select('day, steps, sleep_min, source').gte('day', from).lte('day', to),
   ]);
   const rows = new Map((existing.data ?? []).map((r) => [r.day as string, r]));
@@ -210,7 +218,9 @@ export async function syncHealth(userId: string, to: string, days = 7): Promise<
     let changed = false;
     const st = steps[day] ?? 0;
     const sl = Math.min(sleep[day] ?? 0, 1440);
-    if (st > 0 && !(manual && had?.steps != null) && st !== had?.steps) {
+    // The sensor only knows what it counted since it was turned on, so it never lowers a number from before.
+    const fromBefore = phone && had?.source !== 'phone_sensor' && (had?.steps ?? 0) > st;
+    if (st > 0 && !fromBefore && !(manual && had?.steps != null) && st !== had?.steps) {
       next.steps = st;
       changed = true;
     }
@@ -223,7 +233,7 @@ export async function syncHealth(userId: string, to: string, days = 7): Promise<
         user_id: userId,
         day,
         ...next,
-        source: manual ? 'manual' : 'health_connect',
+        source: manual ? 'manual' : phone ? 'phone_sensor' : 'health_connect',
         updated_at: new Date().toISOString(),
       });
   }

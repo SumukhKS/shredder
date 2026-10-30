@@ -11,7 +11,7 @@ import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { IconTile } from '@/components/ui/icon-tile';
 import { Ring } from '@/components/ui/progress';
-import { Screen, SectionHeader } from '@/components/ui/screen';
+import { LoadError, Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { SwipeDays } from '@/components/swipe-days';
@@ -22,6 +22,7 @@ import { HABITS, isHabit } from '@/lib/habits';
 import { backfillHealth, connectHealth, healthStatus, syncHealth, type HealthStatus } from '@/lib/health';
 import { refreshStreaks } from '@/lib/streak';
 import { useQuery } from '@/lib/use-query';
+import { useAppSettings } from '@/stores/app-settings';
 import { useSession } from '@/stores/session';
 
 const DRINKS = [
@@ -57,8 +58,8 @@ export default function HabitScreen() {
     healthStatus()
       .then(async (s) => {
         setHealth(s);
-        if (s !== 'connected') return;
-        await backfillHealth(userId, toDay());
+        if (s !== 'connected' && useAppSettings.getState().stepsSource !== 'phone_sensor') return;
+        if (s === 'connected') await backfillHealth(userId, toDay());
         const sunday = addDays(mondayOf(day), 6);
         if (await syncHealth(userId, sunday < toDay() ? sunday : toDay(), 7)) reload();
       })
@@ -70,7 +71,7 @@ export default function HabitScreen() {
   const d = snap.data;
   const value = kind === 'water' ? (d?.waterMl ?? 0) : kind === 'steps' ? (d?.health?.steps ?? 0) : (d?.health?.sleep_min ?? 0);
   const target = meta.target(profile);
-  const synced = d?.health?.source === 'health_connect';
+  const synced = d?.health?.source === 'health_connect' || d?.health?.source === 'phone_sensor';
   const pct = target ? value / target : 0;
 
   async function saved() {
@@ -112,6 +113,7 @@ export default function HabitScreen() {
         snap.refresh();
         week.reload();
       }}>
+      <LoadError q={snap} what="this day" />
       <Stack.Screen options={{ title: meta.title }} />
       <AppText variant="h3" align="center">
         {dayLabel(day)}

@@ -3,18 +3,26 @@ import { useCallback, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Segmented } from '@/components/ui/chips';
 import { Screen } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { Space } from '@/constants/theme';
 import { toDay } from '@/lib/dates';
 import { backfillHealth, connectHealth, healthStatus, openHealthSettings, type HealthStatus } from '@/lib/health';
+import { startStepSensor, stopStepSensor } from '@/lib/step-sensor';
+import { useAppSettings } from '@/stores/app-settings';
 import { useSession } from '@/stores/session';
 
-/** Settings > Integrations: Health Connect, where steps and sleep come from. */
+type Source = 'health_connect' | 'phone_sensor';
+
+/** Settings > Integrations: where steps come from, and Health Connect for sleep. */
 export default function IntegrationSettings() {
   const session = useSession((s) => s.session);
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const source = useAppSettings((s) => s.stepsSource);
+  const setStepsSource = useAppSettings((s) => s.setStepsSource);
+  const [sourceNote, setSourceNote] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -23,6 +31,17 @@ export default function IntegrationSettings() {
         .catch(() => setHealth('unsupported'));
     }, [])
   );
+
+  async function changeSource(next: Source) {
+    setSourceNote(null);
+    if (next === 'phone_sensor') {
+      const problem = await startStepSensor();
+      if (problem) return setSourceNote(problem);
+    } else {
+      stopStepSensor();
+    }
+    setStepsSource(next);
+  }
 
   async function connect() {
     setNote(null);
@@ -38,6 +57,27 @@ export default function IntegrationSettings() {
 
   return (
     <Screen padTop={false}>
+      <Card tone="flat" style={{ gap: Space.md }}>
+        <AppText variant="bodyBold">Where steps come from</AppText>
+        <Segmented<Source>
+          options={[
+            { key: 'health_connect', label: 'Health Connect' },
+            { key: 'phone_sensor', label: 'Phone sensor' },
+          ]}
+          value={source}
+          onChange={changeSource}
+        />
+        <AppText variant="small" color="textMuted">
+          {source === 'phone_sensor'
+            ? 'Shredder counts steps with the sensor in this phone, even when the app is closed. A "Tracking steps" notification stays on while it runs, and it uses a little more battery than Health Connect. Steps from before you turned it on stay as they were.'
+            : 'Steps come from your watch or fitness app through Health Connect. Choose Phone sensor if you only carry your phone.'}
+        </AppText>
+        {sourceNote ? (
+          <AppText variant="smallBold" color="danger">
+            {sourceNote}
+          </AppText>
+        ) : null}
+      </Card>
       <Card tone="flat" style={{ gap: Space.md }}>
         <AppText variant="bodyBold">Health Connect</AppText>
         <AppText variant="small" color="textMuted">

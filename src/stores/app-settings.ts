@@ -18,6 +18,9 @@ interface AppSettings {
   weightUnit: 'kg' | 'lb';
   lengthUnit: 'cm' | 'in';
   setUnits: (patch: { weightUnit?: 'kg' | 'lb'; lengthUnit?: 'cm' | 'in' }) => void;
+  /** Where steps come from. The two are never added together. Sleep always comes from Health Connect. */
+  stepsSource: 'health_connect' | 'phone_sensor';
+  setStepsSource: (source: 'health_connect' | 'phone_sensor') => void;
   /** Daily reminders, scheduled on this device (see `src/lib/reminders.ts`). */
   reminders: Record<ReminderKind, Reminder>;
   setReminder: (kind: ReminderKind, patch: Partial<Reminder>) => void;
@@ -32,6 +35,8 @@ export const useAppSettings = create<AppSettings>()(
       weightUnit: 'kg',
       lengthUnit: 'cm',
       setUnits: (patch) => set(patch),
+      stepsSource: 'health_connect',
+      setStepsSource: (stepsSource) => set({ stepsSource }),
       reminders: {
         workout: { on: false, hour: 18, minute: 0 },
         food: { on: false, hour: 20, minute: 30 },
