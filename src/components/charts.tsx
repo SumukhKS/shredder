@@ -79,8 +79,7 @@ export function LineChart({
   const dots = iw / Math.max(1, values.length) >= 7;
 
   const last = values.length - 1;
-  const xLabels =
-    values.length > 4 ? [0, Math.round(last / 3), Math.round((2 * last) / 3), last] : values.map((_, i) => i);
+  const xLabels = values.length > 4 ? [0, Math.round(last / 3), Math.round((2 * last) / 3), last] : values.map((_, i) => i);
 
   const pick = (px: number) => {
     if (!values.length) return;
@@ -263,6 +262,125 @@ export function BarChart({
           ))}
         </Svg>
       ) : null}
+    </View>
+  );
+}
+
+/** Bars with an axis, an optional goal line and a readout: touch a bar to read its value. */
+export function AxisBarChart({
+  values,
+  labels,
+  names,
+  goal,
+  format = fullNumber,
+  minTop = 1,
+  height = 170,
+}: {
+  values: number[];
+  labels: string[];
+  /** Full name of each bar, for the readout. */
+  names: string[];
+  goal?: number;
+  format?: (v: number) => string;
+  /** The axis reaches at least this, so small whole numbers don't get fractional ticks. */
+  minTop?: number;
+  height?: number;
+}) {
+  const c = useColors();
+  const [width, onLayout] = useWidth();
+  const [active, setActive] = useState<number | null>(null);
+
+  const ticks = niceTicks(0, Math.max(minTop, goal ?? 0, ...values));
+  const top = ticks[ticks.length - 1];
+  const longest = Math.max(...ticks.map((t) => fullNumber(t).length));
+  const pad = { l: longest * 6 + 10, r: 4, t: 6, b: 20 };
+  const iw = Math.max(1, width - pad.l - pad.r);
+  const ih = height - pad.t - pad.b;
+  const n = Math.max(1, values.length);
+  const slot = iw / n;
+  const bw = Math.min(24, slot * 0.65);
+  const y = (v: number) => pad.t + ih - (v / (top || 1)) * ih;
+
+  const pick = (px: number) => setActive(Math.max(0, Math.min(n - 1, Math.floor((px - pad.l) / slot))));
+  const scrub = Gesture.Pan()
+    .activeOffsetX([-6, 6])
+    .failOffsetY([-14, 14])
+    .onBegin((e) => scheduleOnRN(pick, e.x))
+    .onUpdate((e) => scheduleOnRN(pick, e.x))
+    .onFinalize(() => scheduleOnRN(setActive, null));
+  const tap = Gesture.Tap()
+    .maxDuration(10_000)
+    .onBegin((e) => scheduleOnRN(pick, e.x))
+    .onFinalize(() => scheduleOnRN(setActive, null));
+
+  return (
+    <View style={{ gap: Space.xs }}>
+      <AppText variant="small" color={active == null ? 'textMuted' : 'text'} numberOfLines={1}>
+        {active == null ? 'Touch a bar to read it' : `${names[active]}: ${format(values[active])}`}
+      </AppText>
+      <GestureDetector gesture={Gesture.Race(scrub, tap)}>
+        <View onLayout={onLayout} style={{ height }}>
+          {width > 0 ? (
+            <Svg width={width} height={height}>
+              {ticks.map((t) => (
+                <Line key={t} x1={pad.l} x2={width - pad.r} y1={y(t)} y2={y(t)} stroke={c.hairline} strokeWidth={1} />
+              ))}
+              {ticks.map((t) => (
+                <SvgText
+                  key={`l${t}`}
+                  x={pad.l - 6}
+                  y={y(t) + 4}
+                  fontSize={10}
+                  fill={c.textMuted}
+                  textAnchor="end"
+                  fontFamily={Fonts.body}>
+                  {fullNumber(t)}
+                </SvgText>
+              ))}
+              {values.map((v, i) => {
+                const h = Math.max(v > 0 ? 3 : 0, (v / (top || 1)) * ih);
+                return (
+                  <Rect
+                    key={i}
+                    x={pad.l + slot * i + (slot - bw) / 2}
+                    y={pad.t + ih - h}
+                    width={bw}
+                    height={h}
+                    rx={Math.min(4, bw / 2)}
+                    fill={active == null || active === i ? c.primary : c.border}
+                  />
+                );
+              })}
+              {goal ? (
+                <Line
+                  x1={pad.l}
+                  x2={width - pad.r}
+                  y1={y(goal)}
+                  y2={y(goal)}
+                  stroke={c.text}
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                />
+              ) : null}
+              {labels.map((l, i) =>
+                l ? (
+                  <SvgText
+                    key={`x${i}`}
+                    x={pad.l + slot * i + slot / 2}
+                    y={height - 4}
+                    fontSize={10}
+                    fill={c.textMuted}
+                    textAnchor="middle"
+                    fontFamily={Fonts.body}>
+                    {l}
+                  </SvgText>
+                ) : null
+              )}
+              <Rect x={0} y={0} width={width} height={height} fill="transparent" />
+            </Svg>
+          ) : null}
+        </View>
+      </GestureDetector>
     </View>
   );
 }
