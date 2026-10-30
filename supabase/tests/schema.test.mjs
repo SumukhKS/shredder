@@ -331,4 +331,28 @@ assert(Number((await one(W, `select best_weight from personal_records where exer
 assert(JSON.stringify(await medals('2026-09-12')) === '[true]' && JSON.stringify(await medals('2026-09-10')) === '[false]',
   'medals are recomputed after merging');
 
+// Merges are remembered and can be undone
+const own = await one(W, `select alias_key, exercise_id from exercise_aliases where user_id = $1`, [W]);
+assert(own?.exercise_id === curlLib, 'a merge remembers the name for later imports');
+blocked = false;
+try { await as(U, `insert into exercise_aliases (alias_key, exercise_id, user_id) values ('x', $1, $2)`, [curlLib, W]); } catch { blocked = true; }
+assert(blocked, "you can't write someone else's aliases");
+assert((await as(U, `select * from exercise_aliases where user_id = $1`, [W])).rows.length === 0, "you can't read someone else's aliases");
+assert((await one(U, `select count(*)::int n from exercise_aliases where user_id is null`)).n > 0, 'known renames are shared with everyone');
+assert((await one(W, `select exercise_alias_key('Hanging Leg Raises ( Weighted )') k`)).k === 'hanginglegraisesweighted', 'alias key ignores spacing and case');
+const mergeLog = await one(W, `select id from exercise_merge_log where undone_at is null order by merged_at desc limit 1`);
+blocked = false;
+try { await as(U, `select undo_exercise_merge($1)`, [mergeLog.id]); } catch { blocked = true; }
+assert(blocked, "you can't undo someone else's merge");
+await as(W, `select undo_exercise_merge($1)`, [mergeLog.id]);
+const back = await one(W, `select count(*)::int n from workout_exercises we where we.exercise_id = $1`, [curlCustom]);
+assert(back.n === 2, `undo moves the logged sessions back (${back.n})`);
+assert((await one(W, `select exercise_id from routine_exercises where routine_id = $1`, [curlRoutine])).exercise_id === curlCustom,
+  'undo moves the routine back');
+assert((await as(W, `select * from exercise_aliases where user_id = $1`, [W])).rows.length === 0, 'undo forgets the name');
+blocked = false;
+try { await as(W, `select undo_exercise_merge($1)`, [mergeLog.id]); } catch { blocked = true; }
+assert(blocked, 'a merge can only be undone once');
+await as(W, `select merge_exercises($1::jsonb)`, [JSON.stringify([{ from: curlCustom, to: curlLib }])]);
+
 console.log('\nAll SQL checks passed.');

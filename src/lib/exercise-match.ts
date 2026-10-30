@@ -46,6 +46,12 @@ const SAME: Record<string, string> = {
   flye: 'fly',
   flyes: 'fly',
   flies: 'fly',
+  flys: 'fly',
+  delts: 'delt',
+  deltoid: 'delt',
+  deltoids: 'delt',
+  running: 'run',
+  runs: 'run',
   extensions: 'extension',
   raises: 'raise',
   curls: 'curl',
@@ -74,6 +80,8 @@ const JOIN: [RegExp, string][] = [
   [/\bskull[\s-]?crushers?\b/g, 'skullcrusher'],
   [/\bez[\s-]?bar\b/g, 'ez'],
   [/\bsmith machine\b/g, 'smith'],
+  [/\bmachine plates?\b/g, 'machine'],
+  [/\bplate[\s-]?loaded\b/g, 'machine'],
   [/\btrap bar\b/g, 'trap'],
   [/\bresistance band\b/g, 'band'],
   [/&/g, ' and '],
@@ -81,6 +89,13 @@ const JOIN: [RegExp, string][] = [
 
 // Words that don't change which exercise it is.
 const FILLER = new Set(['the', 'a', 'and', 'with', 'on', 'of', 'to', 'exercise', 'standard', 'regular', 'normal']);
+
+/** The key a name is stored under in exercise_aliases. Keep in step with exercise_alias_key in the database. */
+export const aliasKey = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]/g, '');
 
 export interface NameParts {
   /** The movement's words, folded and sorted ("curl hammer"). */
@@ -180,25 +195,26 @@ export interface MergeSuggestion<T extends Candidate> {
 }
 
 /**
- * For each custom exercise, the library exercise it most likely is. `alias` names known renames
- * (Hevy title -> library name), which count as sure matches.
+ * For each custom exercise, the library exercise it most likely is. `aliases` holds known renames
+ * and past choices (alias key -> exercise id), which count as sure matches.
  */
 export function suggestMerges<T extends Candidate>(
   customs: T[],
   library: T[],
-  alias: (name: string) => string | undefined = () => undefined
+  aliases: ReadonlyMap<string, string> = new Map()
 ): MergeSuggestion<T>[] {
-  const byName = new Map(library.map((e) => [e.name.toLowerCase(), e]));
+  const byId = new Map(library.map((e) => [e.id, e]));
   const out: MergeSuggestion<T>[] = [];
   for (const custom of customs) {
-    const aliased = alias(custom.name);
-    const known = aliased ? byName.get(aliased.toLowerCase()) : undefined;
+    const aliased = aliases.get(aliasKey(custom.name));
+    const known = aliased ? byId.get(aliased) : undefined;
     if (known) {
       out.push({ custom, match: known, score: 1, sure: true });
       continue;
     }
     const m = bestMatch(custom.name, custom.kind, library, { equipment: custom.equipment });
-    if (m) out.push({ custom, match: m.match, score: m.score, sure: m.exact || m.score >= 0.85 });
+    if (m)
+      out.push({ custom, match: m.match, score: m.score, sure: m.exact || (m.score >= 0.85 && m.match.kind === custom.kind) });
   }
   return out.sort((a, b) => Number(b.sure) - Number(a.sure) || b.score - a.score);
 }

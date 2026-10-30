@@ -1,5 +1,7 @@
+import { fetchAliases, saveAlias } from '@/lib/auto-merge';
+import { inferMuscle } from '@/lib/body-shapes';
 import { toDay } from '@/lib/dates';
-import { bestMatch } from '@/lib/exercise-match';
+import { aliasKey, bestMatch } from '@/lib/exercise-match';
 import { supabase } from '@/lib/supabase';
 import { fetchExercises } from '@/lib/workouts';
 import type { Exercise, ExerciseKind } from '@/types/db';
@@ -8,7 +10,8 @@ import type { Exercise, ExerciseKind } from '@/types/db';
  * Importing training history from Hevy, either through its API (Hevy Pro users paste an
  * API key) or from the workouts CSV any Hevy user can export on their phone. Both paths
  * produce the same HevyWorkout shape, which is then matched to Shredder exercises and
- * saved with the import_workouts RPC (no XP, duplicates skipped).
+ * saved with the import_workouts RPC (no XP, duplicates skipped). Names it isn't sure about
+ * are asked about first (`prepareImport`), never turned into custom exercises silently.
  */
 
 export interface HevySet {
@@ -335,34 +338,7 @@ export function parseHevyCsv(text: string): HevyWorkout[] {
 // Matching Hevy exercises to Shredder's library
 // ---------------------------------------------------------------------------
 
-/** Hevy names that differ from Shredder's for the same exercise. Keys are normalised. */
-/** The library name a Hevy title is known by, when the two differ (e.g. "Butterfly (Pec Deck)" -> "Pec Deck"). */
-export const libraryAlias = (title: string): string | undefined => ALIASES[norm(title)];
-
-const ALIASES: Record<string, string> = {
-  skullcrusherbarbell: 'Skull Crusher (EZ Bar)',
-  skullcrusherezbar: 'Skull Crusher (EZ Bar)',
-  preachercurlbarbell: 'Preacher Curl (EZ Bar)',
-  cableflycrossovers: 'Cable Crossover',
-  seatedcablerowvgripcable: 'Seated Cable Row',
-  seatedcablerowbargripcable: 'Seated Cable Row',
-  butterflypecdeck: 'Pec Deck',
-  dumbbellrow: 'Single Arm Row (Dumbbell)',
-  overheadpressdumbbell: 'Shoulder Press (Dumbbell)',
-  bicepcurlcable: 'Cable Curl',
-  tricepsropepushdown: 'Triceps Pushdown (Rope)',
-  treadmill: 'Treadmill Run',
-  jumprope: 'Skipping Rope',
-  abwheel: 'Ab Wheel Rollout',
-  cyclingmachine: 'Cycling (Stationary)',
-  shrugbarbell: 'Shrug (Dumbbell)',
-};
-
-const norm = (s: string) =>
-  s
-    .toLowerCase()
-    .replace(/&/g, 'and')
-    .replace(/[^a-z0-9]/g, '');
+const norm = aliasKey;
 const base = (s: string) => norm(s.replace(/\s*\([^)]*\)\s*$/, ''));
 const hasEquipment = (s: string) => /\([^)]*\)\s*$/.test(s);
 
@@ -410,74 +386,121 @@ function equipmentFrom(title: string, template?: ApiTemplate): string {
   return 'other';
 }
 
+/** An exercise name the import can't place by itself, with its closest library exercise, if any. */
+export interface ImportQuestion {
+  title: string;
+  templateId?: string;
+  sets: HevySet[];
+  suggestion: Exercise | null;
+}
+
+/** What to do with a name asked about: use this exercise, or `null` to create a custom one. */
+export type ImportAnswers = Map<string, string | null>;
+
+type Wanted = { title: string; templateId?: string; sets: HevySet[] };
+
+export interface ImportSource {
+  workouts: HevyWorkout[];
+  routines?: HevyRoutine[];
+  template?: (id: string) => Promise<ApiTemplate>;
+}
+
+const wantedFrom = (source: ImportSource): Wanted[] => [
+  ...source.workouts.flatMap((w) => w.exercises),
+  ...(source.routines ?? []).flatMap((r) => r.exercises.map((e) => ({ ...e, sets: [] as HevySet[] }))),
+];
+
 /**
- * Hevy exercise title -> Shredder exercise id. Uses the library or your existing custom
- * exercises where the names match; creates custom exercises for the rest.
+ * Places every name it safely can: your past choices and known renames, then your own and library
+ * exercises of the same name under another spelling. Everything else comes back as a question.
  */
 export async function matchExercises(
   userId: string,
-  wanted: { title: string; templateId?: string; sets: HevySet[] }[],
-  template: ((id: string) => Promise<ApiTemplate>) | null,
-  progress: Progress
-): Promise<{ ids: Map<string, string>; created: string[] }> {
+  wanted: Wanted[]
+): Promise<{ ids: Map<string, string>; questions: ImportQuestion[]; library: Exercise[] }> {
   // Paged, so the whole library (more than the server's 1,000 rows a request) is matched against.
-  const all = await fetchExercises();
+  const [all, aliases] = await Promise.all([fetchExercises(), fetchAliases()]);
   // Your own exercises first, so a previous import's custom exercise is reused.
   const byName = new Map<string, Exercise>();
-  for (const e of [...all.filter((e) => e.created_by === null), ...all.filter((e) => e.created_by === userId)]) {
-    byName.set(norm(e.name), e);
-  }
+  const usable = [...all.filter((e) => e.created_by === null), ...all.filter((e) => e.created_by === userId)];
+  for (const e of usable) byName.set(norm(e.name), e);
+  const byId = new Map(usable.map((e) => [e.id, e]));
   const library = all.filter((e) => e.created_by === null);
 
   const ids = new Map<string, string>();
-  const created: string[] = [];
-  const unmatched = new Map<string, { templateId?: string; sets: HevySet[] }>();
+  const unsure = new Map<string, ImportQuestion>();
 
   for (const w of wanted) {
     if (ids.has(w.title)) continue;
-    const key = norm(w.title);
-    const exact = byName.get(key) ?? (ALIASES[key] ? byName.get(norm(ALIASES[key])) : undefined);
-    // "Leg Press (Machine)" -> "Leg Press": only when one side names no equipment, so
-    // "Bench Press (Dumbbell)" never becomes "Bench Press (Barbell)".
-    const loose =
-      exact ??
-      library.find((e) => base(e.name) === base(w.title) && (!hasEquipment(e.name) || !hasEquipment(w.title))) ??
-      // The same exercise spelled another way ("Bicep Curl" / "Biceps Curl", "Pull Up" / "Pull-Up").
-      (() => {
-        const m = bestMatch(w.title, undefined, library);
-        return m?.exact ? m.match : undefined;
-      })();
-    if (loose) {
-      ids.set(w.title, loose.id);
-    } else {
-      const u = unmatched.get(w.title) ?? { templateId: w.templateId, sets: [] };
-      u.sets.push(...w.sets);
-      unmatched.set(w.title, u);
+    const known = unsure.get(w.title);
+    if (known) {
+      known.sets.push(...w.sets);
+      continue;
     }
+    const key = norm(w.title);
+    const aliased = aliases.get(key);
+    const placed =
+      (aliased ? byId.get(aliased) : undefined) ??
+      byName.get(key) ??
+      // "Leg Press (Machine)" -> "Leg Press": only when one side names no equipment, so
+      // "Bench Press (Dumbbell)" never becomes "Bench Press (Barbell)".
+      library.find((e) => base(e.name) === base(w.title) && (!hasEquipment(e.name) || !hasEquipment(w.title)));
+    if (placed) {
+      ids.set(w.title, placed.id);
+      continue;
+    }
+    // The same exercise spelled another way ("Bicep Curl" / "Biceps Curl", "Pull Up" / "Pull-Up").
+    const m = bestMatch(w.title, undefined, library);
+    if (m?.exact) ids.set(w.title, m.match.id);
+    else unsure.set(w.title, { title: w.title, templateId: w.templateId, sets: [...w.sets], suggestion: m?.match ?? null });
   }
+  return { ids, questions: [...unsure.values()], library };
+}
 
+/** The names to ask about before importing, and the library to answer from. */
+export async function prepareImport(userId: string, source: ImportSource) {
+  const { questions, library } = await matchExercises(userId, wantedFrom(source));
+  return { questions, library };
+}
+
+/** Apply the answers: remembered library choices, and custom exercises for the ones to create. */
+async function applyAnswers(
+  userId: string,
+  questions: ImportQuestion[],
+  answers: ImportAnswers,
+  ids: Map<string, string>,
+  template: ImportSource['template'],
+  progress: Progress
+) {
+  const created: string[] = [];
   let n = 0;
-  for (const [title, u] of unmatched) {
+  for (const q of questions) {
     n++;
-    progress(`Adding exercises Shredder doesn't have… ${n} of ${unmatched.size}`);
+    const answer = answers.get(q.title) ?? null;
+    if (answer) {
+      await saveAlias(userId, q.title, answer);
+      ids.set(q.title, answer);
+      continue;
+    }
+    progress(`Adding exercises Shredder doesn't have… ${n} of ${questions.length}`);
     let t: ApiTemplate | undefined;
-    if (template && u.templateId) t = await template(u.templateId).catch(() => undefined);
+    if (template && q.templateId) t = await template(q.templateId).catch(() => undefined);
     const { data: row, error: insertError } = await supabase
       .from('exercises')
       .insert({
-        name: title,
-        primary_muscle: (t && MUSCLES[t.primary_muscle_group]) || 'other',
-        equipment: equipmentFrom(title, t),
-        kind: (t && kindFromTemplate(t.type)) || kindFromSets(u.sets),
+        name: q.title,
+        primary_muscle: (t && MUSCLES[t.primary_muscle_group]) || inferMuscle(q.title) || 'other',
+        equipment: equipmentFrom(q.title, t),
+        kind: (t && kindFromTemplate(t.type)) || kindFromSets(q.sets),
         created_by: userId,
       })
       .select('id')
       .single();
     if (insertError) throw insertError;
-    ids.set(title, row.id as string);
-    created.push(title);
+    ids.set(q.title, row.id as string);
+    created.push(q.title);
   }
-  return { ids, created };
+  return created;
 }
 
 // ---------------------------------------------------------------------------
@@ -486,15 +509,13 @@ export async function matchExercises(
 
 export async function importHevy(
   userId: string,
-  source: { workouts: HevyWorkout[]; routines?: HevyRoutine[]; template?: (id: string) => Promise<ApiTemplate> },
-  progress: Progress
+  source: ImportSource,
+  progress: Progress,
+  answers: ImportAnswers = new Map()
 ): Promise<ImportResult> {
   const routines = source.routines ?? [];
-  const wanted = [
-    ...source.workouts.flatMap((w) => w.exercises),
-    ...routines.flatMap((r) => r.exercises.map((e) => ({ ...e, sets: [] as HevySet[] }))),
-  ];
-  const { ids, created } = await matchExercises(userId, wanted, source.template ?? null, progress);
+  const { ids, questions } = await matchExercises(userId, wantedFrom(source));
+  const created = await applyAnswers(userId, questions, answers, ids, source.template, progress);
 
   const ordered = [...source.workouts].sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
   let imported = 0;

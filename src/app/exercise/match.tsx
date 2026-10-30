@@ -12,9 +12,8 @@ import { EmptyState, Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Radius, Space } from '@/constants/theme';
-import { mergeExercises } from '@/lib/auto-merge';
+import { fetchAliases, mergeExercises } from '@/lib/auto-merge';
 import { nameScore, suggestMerges } from '@/lib/exercise-match';
-import { libraryAlias } from '@/lib/hevy';
 import { supabase } from '@/lib/supabase';
 import { useQuery } from '@/lib/use-query';
 import { fetchExercises, matchesSearch, MUSCLE_LABELS } from '@/lib/workouts';
@@ -34,10 +33,10 @@ export default function MatchExercises() {
   const router = useRouter();
   const userId = useSession((s) => s.session?.user.id);
   const q = useQuery(async () => {
-    const all = await fetchExercises();
+    const [all, aliases] = await Promise.all([fetchExercises(), fetchAliases()]);
     const customs = all.filter((e) => e.created_by === userId);
     const library = all.filter((e) => e.created_by === null);
-    const suggestions = suggestMerges(customs, library, libraryAlias);
+    const suggestions = suggestMerges(customs, library, aliases);
     const suggested = new Set(suggestions.map((s) => s.custom.id));
     const unmatched = customs.filter((e) => !suggested.has(e.id));
     const uses = new Map<string, number>();
