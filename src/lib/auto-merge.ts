@@ -51,3 +51,30 @@ export async function autoMergeExercises(userId: string, force = false): Promise
   localStorage.setItem(LAST_RUN_KEY, `${userId}|${today}`);
   return merged;
 }
+
+export interface MergeLogEntry {
+  id: string;
+  name: string;
+  merged_at: string;
+}
+
+/** Recent merges that can still be put back. */
+export async function fetchRecentMerges(): Promise<MergeLogEntry[]> {
+  const { data, error } = await supabase
+    .from('exercise_merge_log')
+    .select('id, from_exercise, merged_at')
+    .is('undone_at', null)
+    .order('merged_at', { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    name: (r.from_exercise as { name?: string }).name ?? 'Exercise',
+    merged_at: r.merged_at as string,
+  }));
+}
+
+export async function undoMerge(id: string) {
+  const { error } = await supabase.rpc('undo_exercise_merge', { p_log_id: id });
+  if (error) throw error;
+}

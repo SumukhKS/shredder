@@ -8,11 +8,11 @@ import { ExerciseDemo } from '@/components/exercise-demo';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
-import { EmptyState, Screen, SectionHeader } from '@/components/ui/screen';
+import { LoadError, EmptyState, Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Radius, Space } from '@/constants/theme';
-import { fetchAliases, mergeExercises } from '@/lib/auto-merge';
+import { fetchAliases, fetchRecentMerges, mergeExercises, undoMerge } from '@/lib/auto-merge';
 import { nameScore, suggestMerges } from '@/lib/exercise-match';
 import { supabase } from '@/lib/supabase';
 import { useQuery } from '@/lib/use-query';
@@ -60,10 +60,26 @@ export default function MatchExercises() {
   // The custom exercise being matched by hand.
   const [picking, setPicking] = useState<Exercise | null>(null);
   const workoutRunning = useWorkout((s) => !!s.active);
+  const merges = useQuery(fetchRecentMerges, '');
 
   const suggestions = q.data?.suggestions ?? [];
   const unmatched = q.data?.unmatched ?? [];
   const ticked = suggestions.filter((s) => s.sure !== flipped.has(s.custom.id));
+
+  async function undo(id: string) {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await undoMerge(id);
+      setMessage('Merge undone. The exercise and its history are back as they were.');
+      q.reload();
+      merges.reload();
+    } catch (e) {
+      setMessage(`Couldn't undo: ${e instanceof Error ? e.message : 'try again'}`);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function merge(pairs: { from: string; to: string }[]) {
     setBusy(true);
@@ -71,6 +87,7 @@ export default function MatchExercises() {
     try {
       const n = await mergeExercises(pairs);
       setFlipped(new Set());
+      merges.reload();
       setMessage(`Merged ${n} exercise${n === 1 ? '' : 's'}. Their history, PRs and routines now use the library exercise.`);
       q.reload();
     } catch (e) {
@@ -97,7 +114,21 @@ export default function MatchExercises() {
           </View>
         ) : null
       }>
+      <LoadError q={q} what="your exercises" />
       <Stack.Screen options={{ title: 'Match to library' }} />
+      {merges.data?.length ? (
+        <Card tone="flat" style={{ gap: Space.sm }}>
+          <AppText variant="bodyBold">Recent merges</AppText>
+          {merges.data.map((m) => (
+            <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', gap: Space.sm }}>
+              <AppText variant="small" color="textMuted" style={{ flex: 1 }} numberOfLines={2}>
+                {m.name}, {new Date(m.merged_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+              </AppText>
+              <Button label="Undo" size="sm" variant="secondary" disabled={busy || workoutRunning} onPress={() => undo(m.id)} />
+            </View>
+          ))}
+        </Card>
+      ) : null}
       <AppText color="textMuted">
         These custom exercises look like ones in the library. Merging moves every set you logged, your PRs and routines onto the
         library exercise, which has its own demo and instructions. Tap a row to include or leave it out.
