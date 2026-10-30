@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { memo, useEffect, useRef, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, TextInput, View, Switch } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Animated, { FadeInDown, useAnimatedRef, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -102,9 +102,7 @@ export default function ActiveWorkoutScreen() {
       {/* Top bar */}
       <View style={[styles.top, { paddingTop: insets.top + Space.sm, borderColor: c.hairline }]}>
         <IconButton icon="chevron-down" label="Minimise workout" onPress={() => router.back()} />
-        <View style={{ flex: 1, alignItems: 'center' }}>
-          <ElapsedClock startedAt={a.startedAt} />
-        </View>
+        <View style={{ flex: 1 }} />
         <Button
           label="Finish"
           size="sm"
@@ -133,6 +131,7 @@ export default function ActiveWorkoutScreen() {
           accessibilityLabel="Workout name"
           style={[styles.title, { color: c.text }]}
         />
+        <ElapsedClock startedAt={a.startedAt} />
         <View style={styles.stats}>
           <StatPill label="Sets" value={String(sets)} />
           <StatPill label="Volume" value={formatVolume(liveVolume(a), unit)} />
@@ -248,8 +247,8 @@ function useNow() {
 function ElapsedClock({ startedAt }: { startedAt: string }) {
   const now = useNow();
   return (
-    <AppText variant="stat" style={{ fontSize: 22 }}>
-      {clock((now - new Date(startedAt).getTime()) / 1000)}
+    <AppText variant="bodyBold" color="textMuted" style={{ marginTop: -Space.md }}>
+      Duration {clock((now - new Date(startedAt).getTime()) / 1000)}
     </AppText>
   );
 }
@@ -360,7 +359,6 @@ const ExerciseBlock = memo(function ExerciseBlock({
   const [menu, setMenu] = useState(false);
   const [setMenuFor, setSetMenuFor] = useState<string | null>(null);
   const restOptions: [string, number][] = [
-    ['No rest timer', 0],
     ['60 seconds', 60],
     ['90 seconds', 90],
     ['2 minutes', 120],
@@ -368,7 +366,7 @@ const ExerciseBlock = memo(function ExerciseBlock({
   ];
   const menuOptions: MenuOption[] = [
     ...restOptions.map(([label, secs]) => ({
-      label: `Rest: ${label}`,
+      label: `Rest length: ${label}`,
       icon: 'timer-outline' as const,
       selected: ex.restSeconds === secs,
       onPress: () => w.setRestSeconds(ex.key, secs),
@@ -392,11 +390,23 @@ const ExerciseBlock = memo(function ExerciseBlock({
             </AppText>
             <AppText variant="small" color="textMuted">
               {MUSCLE_LABELS[ex.exercise.primary_muscle] ?? ex.exercise.primary_muscle}
-              {ex.restSeconds > 0 ? `, ${ex.restSeconds}s rest` : ', no rest timer'}
             </AppText>
           </View>
         </Pressable>
         <IconButton icon="ellipsis-horizontal" label={`Options for ${ex.exercise.name}`} onPress={() => setMenu(true)} />
+      </View>
+
+      <View style={styles.row}>
+        <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
+          Rest timer{ex.restOff ? ', off' : `, ${ex.restSeconds}s`}
+        </AppText>
+        <Switch
+          accessibilityLabel={`Rest timer for ${ex.exercise.name}`}
+          value={!ex.restOff}
+          onValueChange={(on) => w.setRestOn(ex.key, on)}
+          trackColor={{ true: c.primary, false: c.border }}
+          thumbColor={c.text}
+        />
       </View>
 
       <TextInput
@@ -409,6 +419,7 @@ const ExerciseBlock = memo(function ExerciseBlock({
 
       {/* Header */}
       <View style={[styles.setRow, { paddingVertical: 0 }]}>
+        <View style={styles.colDelete} />
         <AppText variant="smallBold" color="textMuted" style={styles.colSet}>
           Set
         </AppText>
@@ -548,9 +559,16 @@ function SetRow({
       <View style={[styles.setRow, { backgroundColor: set.done ? c.primarySoft : c.surface }]}>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={`Delete set ${label}`}
+          onPress={onRemove}
+          hitSlop={4}
+          style={styles.colDelete}>
+          <Ionicons name="trash-outline" size={15} color={c.textMuted} />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
           accessibilityLabel={`Set ${label}. Tap for set type or to delete it`}
           onPress={onMenu}
-          onLongPress={onRemove}
           style={styles.colSet}>
           <AppText variant="bodyBold" style={{ color: typeColor }}>
             {label}
@@ -663,7 +681,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     borderRadius: 10,
   },
-  colSet: { width: 30, alignItems: 'center' },
+  colDelete: { width: 20, alignItems: 'center' },
+  colSet: { width: 22, alignItems: 'center' },
   colPrev: { flex: 1.3, minWidth: 0 },
   colInput: { flex: 1, minWidth: 0 },
   colCheck: { width: 36 },

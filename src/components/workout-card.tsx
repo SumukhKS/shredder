@@ -40,10 +40,14 @@ export function WorkoutCard({
     <Card onPress={onPress} style={{ gap: Space.md }}>
       <View style={styles.row}>
         <View style={{ flex: 1, gap: 6 }}>
-          <AppText variant="h3" color="primary" numberOfLines={2}>
+          <AppText variant="h3" numberOfLines={2}>
             {workout.name}
           </AppText>
-          <WorkoutMeta workout={workout} showDay={showDay} />
+          <AppText variant="small" color="textMuted">
+            {[showDay ? dayLabel(workout.day) : null, timeOf(workout.started_at), formatDuration(workout.duration_s)]
+              .filter(Boolean)
+              .join(', ')}
+          </AppText>
         </View>
         {workout.pr_count > 0 ? (
           <View style={[styles.pr, { backgroundColor: c.surfaceHi, borderColor: withAlpha(c.carbs, 0.5) }]}>
@@ -65,21 +69,20 @@ export function WorkoutDetailCard({
   workout,
   exercises,
   onOptions,
-  onEdit,
 }: {
   workout: WorkoutSummary;
   exercises?: ExerciseLog[];
-  /** Opens the workout's own screen (repeat, delete). */
+  /** Opens the three-dot menu (edit, repeat). */
   onOptions?: () => void;
-  onEdit?: () => void;
 }) {
   const c = useColors();
   const router = useRouter();
   const units = useUnits();
   return (
     <Card style={{ gap: Space.lg }}>
-      <WorkoutHeader workout={workout} onEdit={onEdit} onOptions={onOptions} />
+      <WorkoutHeader workout={workout} onOptions={onOptions} />
       <View style={[styles.stats, { borderColor: c.hairline }]}>
+        <Stat label="Duration" value={formatDuration(workout.duration_s)} />
         <Stat label="Volume" value={formatVolume(Number(workout.total_volume), units.weight)} />
         <Stat label="Sets" value={String(workout.total_sets)} />
         <Stat label="PRs" value={String(workout.pr_count)} />
@@ -131,65 +134,25 @@ export function WorkoutDetailCard({
 
 const timeOf = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
-/** The workout's name on the blaze gradient, with its date, start time and length as pills. */
+/** The workout's name, with the date and time it was logged underneath. */
 export function WorkoutHeader({
   workout,
-  onEdit,
   onOptions,
 }: {
-  workout: Pick<WorkoutSummary, 'name' | 'day' | 'started_at' | 'duration_s'>;
-  onEdit?: () => void;
+  workout: Pick<WorkoutSummary, 'name' | 'day' | 'started_at'>;
   onOptions?: () => void;
 }) {
-  const c = useColors();
-  const pills: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
-    { icon: 'calendar', text: dayLabel(workout.day) },
-    ...(workout.started_at ? [{ icon: 'time' as const, text: timeOf(workout.started_at) }] : []),
-    { icon: 'stopwatch', text: formatDuration(workout.duration_s) },
-  ];
   return (
-    <View style={[styles.band, { backgroundColor: c.primary }]}>
-      <View style={styles.row}>
-        <AppText variant="h2" color="onPrimary" numberOfLines={2} style={{ flex: 1 }}>
+    <View style={styles.row}>
+      <View style={{ flex: 1, gap: 2 }}>
+        <AppText variant="h2" numberOfLines={2}>
           {workout.name}
         </AppText>
-        {onEdit ? <IconButton icon="create-outline" label="Edit workout" color={c.onPrimary} onPress={onEdit} /> : null}
-        {onOptions ? (
-          <IconButton icon="ellipsis-vertical" label="Workout options" color={c.onPrimary} onPress={onOptions} />
-        ) : null}
+        <AppText variant="small" color="textMuted">
+          {[dayLabel(workout.day), workout.started_at ? timeOf(workout.started_at) : null].filter(Boolean).join(', ')}
+        </AppText>
       </View>
-      <View style={styles.pills}>
-        {pills.map((p) => (
-          <View key={p.icon} style={[styles.pill, { backgroundColor: 'rgba(0,0,0,0.18)' }]}>
-            <Ionicons name={p.icon} size={13} color={c.onPrimary} />
-            <AppText variant="smallBold" color="onPrimary" style={{ fontSize: 12 }}>
-              {p.text}
-            </AppText>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-/** Date (optional), start time and length as small tinted pills, for summary cards. */
-function WorkoutMeta({ workout, showDay }: { workout: WorkoutSummary; showDay: boolean }) {
-  const c = useColors();
-  const pills: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
-    ...(showDay ? [{ icon: 'calendar' as const, text: dayLabel(workout.day) }] : []),
-    ...(workout.started_at ? [{ icon: 'time' as const, text: timeOf(workout.started_at) }] : []),
-    { icon: 'stopwatch', text: formatDuration(workout.duration_s) },
-  ];
-  return (
-    <View style={styles.pills}>
-      {pills.map((p) => (
-        <View key={p.icon} style={[styles.pill, { backgroundColor: withAlpha(c.primary, 0.14) }]}>
-          <Ionicons name={p.icon} size={12} color={c.accent} />
-          <AppText variant="smallBold" color="accent" style={{ fontSize: 11 }}>
-            {p.text}
-          </AppText>
-        </View>
-      ))}
+      {onOptions ? <IconButton icon="ellipsis-vertical" label="Workout options" onPress={onOptions} /> : null}
     </View>
   );
 }
@@ -197,7 +160,9 @@ function WorkoutMeta({ workout, showDay }: { workout: WorkoutSummary; showDay: b
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
-      <AppText variant="stat">{value}</AppText>
+      <AppText variant="bodyBold" numberOfLines={1} adjustsFontSizeToFit>
+        {value}
+      </AppText>
       <AppText variant="small" color="textMuted">
         {label}
       </AppText>
@@ -250,15 +215,5 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: Radius.chip,
     borderWidth: 1,
-  },
-  band: { borderRadius: Radius.row, padding: Space.md, gap: Space.sm, marginTop: -Space.xs },
-  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.chip,
   },
 });

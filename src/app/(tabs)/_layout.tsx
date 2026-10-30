@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs, useRouter } from 'expo-router';
 import type { BottomTabBarProps } from 'expo-router/tabs';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/ui/text';
@@ -10,7 +10,7 @@ import { useColors } from '@/components/ui/theme';
 import { Radius, Space } from '@/constants/theme';
 import { clock } from '@/lib/dates';
 import { useTodayLayout } from '@/stores/today-layout';
-import { completedSetCount, useWorkout } from '@/stores/workout';
+import { useWorkout } from '@/stores/workout';
 
 const TABS: { name: string; label: string; icon: keyof typeof Ionicons.glyphMap; iconOn: keyof typeof Ionicons.glyphMap }[] = [
   { name: 'index', label: 'Today', icon: 'flash-outline', iconOn: 'flash' },
@@ -73,6 +73,7 @@ function ActiveWorkoutBanner() {
   const c = useColors();
   const router = useRouter();
   const active = useWorkout((s) => s.active);
+  const discard = useWorkout((s) => s.discard);
   const running = !!active;
   const [now, setNow] = useState(() => Date.now());
 
@@ -96,9 +97,22 @@ function ActiveWorkoutBanner() {
         {active.name}
       </AppText>
       <AppText variant="smallBold" color={c.onAccent}>
-        {completedSetCount(active)} sets, {clock(elapsed)}
+        {clock(elapsed)}
       </AppText>
-      <Ionicons name="chevron-up" size={18} color={c.onAccent} />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Discard workout"
+        hitSlop={8}
+        onPress={() =>
+          Alert.alert('Discard workout?', 'Everything you logged in this session will be deleted.', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Discard', style: 'destructive', onPress: discard },
+          ])
+        }>
+        <AppText variant="smallBold" color={c.onAccent} style={{ textDecorationLine: 'underline' }}>
+          Discard
+        </AppText>
+      </Pressable>
     </Pressable>
   );
 }

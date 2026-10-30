@@ -4,7 +4,7 @@ import { readCache, writeCache } from '@/lib/use-query';
 import { enqueue, waitingEntries } from '@/lib/outbox';
 import { applyPending, newId } from '@/lib/outbox-core';
 import { supabase } from '@/lib/supabase';
-import type { Exercise, ExerciseKind, Routine, WorkoutSummary } from '@/types/db';
+import type { Exercise, ExerciseKind, Routine, WorkoutSummary, RoutineExercise } from '@/types/db';
 import { weightNumber, type WeightUnit } from '@/lib/units';
 
 export interface PreviousSet {
@@ -152,7 +152,7 @@ export async function fetchRoutines(): Promise<Routine[]> {
   const { data, error } = await supabase
     .from('routines')
     .select(
-      'id, name, notes, updated_at, routine_exercises(id, exercise_id, position, target_sets, target_reps, rest_seconds, exercises(*))'
+      'id, name, notes, updated_at, routine_exercises(id, exercise_id, position, target_sets, target_reps, rest_seconds, set_targets, rest_enabled, exercises(*))'
     )
     .order('updated_at', { ascending: false });
   if (error) throw error;
@@ -285,6 +285,15 @@ export interface RoutineDraftExercise {
   target_sets: number;
   target_reps: string;
   rest_seconds: number;
+  rest_enabled: boolean;
+  set_targets: { reps: number | null }[];
+}
+
+/** A routine exercise's target for each set. A range like "8-12" counts as its first number. */
+export function routineTargets(re: Pick<RoutineExercise, 'set_targets' | 'target_sets' | 'target_reps'>): (number | null)[] {
+  if (re.set_targets?.length) return re.set_targets.map((t) => t.reps);
+  const first = re.target_reps?.match(/\d{1,3}/)?.[0];
+  return Array.from({ length: Math.max(1, re.target_sets) }, () => (first ? Number(first) : null));
 }
 
 /** `shown` holds the exercises themselves, so the routine can be displayed before it has been sent. */
@@ -321,7 +330,7 @@ export function routinesWithWaiting(routines: Routine[]): Routine[] {
       out = out.map((r) => (r.id === op.match.routine_id ? { ...r, routine_exercises: [] } : r));
     } else if (op.kind === 'insert' && op.table === 'routine_exercises') {
       const shown = (meta?.shown ?? []) as Exercise[];
-      const rows = (Array.isArray(op.values) ? op.values : [op.values]) as unknown as Routine['routine_exercises'];
+      const rows = (Array.isArray(op.values) ? op.values : [op.values]) as unknown as RoutineExercise[];
       out = out.map((r) => {
         const mine = rows.filter((x) => (x as unknown as { routine_id: string }).routine_id === r.id);
         if (mine.length === 0 || mine.every((m) => r.routine_exercises?.some((e) => e.id === m.id))) return r;

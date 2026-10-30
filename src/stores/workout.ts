@@ -9,7 +9,15 @@ import { discardEntry, enqueue, trySend } from '@/lib/outbox';
 import { newId } from '@/lib/outbox-core';
 import { currentUnits, fromKg, toKg, type WeightUnit } from '@/lib/units';
 import { parseAmount, SET_LIMITS } from '@/lib/validate';
-import { beatsAll, e1rm, fetchBests, fetchPreviousSets, type ExerciseBest, type PreviousSet } from '@/lib/workouts';
+import {
+  beatsAll,
+  e1rm,
+  fetchBests,
+  fetchPreviousSets,
+  routineTargets,
+  type ExerciseBest,
+  type PreviousSet,
+} from '@/lib/workouts';
 import type { Exercise, ExerciseKind, FinishWorkoutResult, Routine, SetType } from '@/types/db';
 
 export interface ActiveSet {
@@ -28,6 +36,10 @@ export interface ActiveExercise {
   key: string;
   exercise: Exercise;
   restSeconds: number;
+  /** The rest timer is switched off; `restSeconds` keeps its length for when it's back on. */
+  restOff?: boolean;
+  /** A routine's target for each set, shown as the blank field's hint. */
+  targets?: (number | null)[];
   notes: string;
   sets: ActiveSet[];
   previous: PreviousSet[];
@@ -83,6 +95,7 @@ interface WorkoutState {
   cycleSetType: (exKey: string, setKey: string) => void;
   toggleDone: (exKey: string, setKey: string) => { done: boolean; pr: PrHit | null; problem?: string };
   setRestSeconds: (exKey: string, seconds: number) => void;
+  setRestOn: (exKey: string, on: boolean) => void;
   adjustRest: (deltaSeconds: number) => void;
   skipRest: () => void;
   discard: () => void;
@@ -142,12 +155,18 @@ function fromPrevious(kind: ExerciseKind, prev: PreviousSet | undefined, field: 
  * and for the first set, the first set from last time.
  */
 export function placeholderFor(ex: ActiveExercise, index: number, field: SetField, unit: WeightUnit): string {
+  const target = ex.targets?.[index];
+  if (target != null && field === targetField(ex.exercise.kind)) return String(target);
   for (let i = index - 1; i >= 0; i--) {
     const v = ex.sets[i][field];
     if (v !== '') return v;
   }
   return fromPrevious(ex.exercise.kind, ex.previous[0], field, unit);
 }
+
+/** What a routine's per-set target counts: reps, or time for timed exercises. */
+export const targetField = (kind: ExerciseKind): SetField =>
+  kind === 'duration' || kind === 'distance_time' ? 'duration' : 'reps';
 
 function filled(ex: ActiveExercise, index: number, unit: WeightUnit): ActiveSet {
   const s = { ...ex.sets[index] };
@@ -197,7 +216,7 @@ function buildExercise(
   setCount: number,
   restSeconds = 90
 ): ActiveExercise {
-  const count = Math.max(1, setCount || previous.length || 3);
+  const count = Math.max(1, setCount || previous.length || 1);
   return {
     key: uid(),
     exercise,
@@ -215,7 +234,7 @@ function buildExercise(
  */
 function withHistory(ex: ActiveExercise, previous: PreviousSet[], best: ExerciseBest | undefined, fixedCount: boolean) {
   const untouched = ex.sets.every((x) => !x.done && FIELDS.every((f) => x[f] === ''));
-  const count = Math.max(1, previous.length || 3);
+  const count = Math.max(1, previous.length || 1);
   const sets = !fixedCount && untouched && count !== ex.sets.length ? Array.from({ length: count }, emptySet) : ex.sets;
   return { ...ex, previous, best: best ?? null, sets };
 }
@@ -295,8 +314,11 @@ export const useWorkout = create<WorkoutState>()(
           // The exercises show straight away; last time's numbers fill in when they arrive.
           const fixed = new Set<string>();
           const exercises = (routine?.routine_exercises ?? []).map((r) => {
-            const e = buildExercise(r.exercises, [], undefined, r.target_sets, r.rest_seconds);
-            if (r.target_sets > 0) fixed.add(e.key);
+            const targets = routineTargets(r);
+            const e = buildExercise(r.exercises, [], undefined, targets.length, r.rest_seconds);
+            e.targets = targets;
+            e.restOff = r.rest_enabled === false;
+            fixed.add(e.key);
             return e;
           });
           set({
@@ -389,7 +411,7 @@ export const useWorkout = create<WorkoutState>()(
           const pr = detectPr(ex, index, next, unit);
           next.pr = !!pr;
           mapExercise(exKey, (e) => ({ ...e, sets: e.sets.map((x) => (x.key === setKey ? next : x)) }));
-          if (ex.restSeconds > 0 && target.setType !== 'warmup') {
+          if (ex.restSeconds > 0 && !ex.restOff && target.setType !== 'warmup') {
             set({
               rest: { endsAt: Date.now() + ex.restSeconds * 1000, duration: ex.restSeconds, exerciseName: ex.exercise.name },
             });
@@ -398,6 +420,8 @@ export const useWorkout = create<WorkoutState>()(
         },
 
         setRestSeconds: (exKey, seconds) => mapExercise(exKey, (e) => ({ ...e, restSeconds: seconds })),
+
+        setRestOn: (exKey, on) => mapExercise(exKey, (e) => ({ ...e, restOff: !on })),
 
         adjustRest: (delta) =>
           set((s) =>

@@ -1,16 +1,11 @@
-import { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { bodyBack } from 'react-native-body-highlighter/dist/assets/bodyBack';
 import { bodyFemaleBack } from 'react-native-body-highlighter/dist/assets/bodyFemaleBack';
 import { bodyFemaleFront } from 'react-native-body-highlighter/dist/assets/bodyFemaleFront';
 import { bodyFront } from 'react-native-body-highlighter/dist/assets/bodyFront';
-import Animated, {
-  Easing,
-  FadeIn,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 
 import { Radius, Space, withAlpha } from '@/constants/theme';
@@ -57,7 +52,10 @@ const ORDER = MUSCLE_REGIONS.flatMap((r) => r.muscles);
  */
 export function MuscleMap({
   exercises,
+  startOpen = false,
 }: {
+  /** The body figures are heavy to draw, so they stay closed until tapped unless this is set. */
+  startOpen?: boolean;
   exercises: {
     name?: string;
     primary_muscle?: string;
@@ -81,14 +79,28 @@ export function MuscleMap({
   const byVolume = trained.some(([, l]) => l.volume > 0);
   const size = (l: MuscleLoad) => (byVolume ? l.volume : l.primary + l.secondary / 2);
   const max = Math.max(1, ...trained.map(([, l]) => size(l)));
+  const [open, setOpen] = useState(startOpen);
+  // Cardio has no volume, so its bar shows its share of all the sets.
+  const totalSets = exercises.reduce((n, e) => n + e.sets.filter((s) => s.set_type !== 'warmup').length, 0);
 
   return (
     <View style={{ gap: Space.md }}>
-      <AppText variant="h3">Muscles worked</AppText>
-      <View style={styles.bodies}>
-        <Figure {...figure.front} loads={loads} label="Front" />
-        <Figure {...figure.back} loads={loads} label="Back" />
-      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        onPress={() => setOpen((o) => !o)}
+        style={styles.toggle}>
+        <AppText variant="smallBold" color="textMuted" style={{ flex: 1 }}>
+          {open ? 'Hide body figure' : 'Show body figure'}
+        </AppText>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={c.textMuted} />
+      </Pressable>
+      {open ? (
+        <View style={styles.bodies}>
+          <Figure {...figure.front} loads={loads} label="Front" />
+          <Figure {...figure.back} loads={loads} label="Back" />
+        </View>
+      ) : null}
       {trained.length || cardioSets ? (
         <View style={{ gap: Space.md }}>
           {trained.map(([m, l]) => {
@@ -119,13 +131,23 @@ export function MuscleMap({
             );
           })}
           {cardioSets ? (
-            <View style={styles.rowHead}>
-              <AppText variant="bodyBold" style={{ flex: 1 }}>
-                Cardio
-              </AppText>
-              <AppText variant="smallBold">
-                {cardioSets} set{cardioSets === 1 ? '' : 's'}
-              </AppText>
+            <View style={{ gap: 6 }}>
+              <View style={styles.rowHead}>
+                <AppText variant="bodyBold" style={{ flex: 1 }}>
+                  Cardio
+                </AppText>
+                <AppText variant="smallBold">
+                  {cardioSets} set{cardioSets === 1 ? '' : 's'}
+                </AppText>
+              </View>
+              <View style={[styles.track, { backgroundColor: c.surfaceHi }]}>
+                <View
+                  style={[
+                    styles.fill,
+                    { width: `${Math.max(4, (cardioSets / Math.max(1, totalSets)) * 100)}%`, backgroundColor: c.primary },
+                  ]}
+                />
+              </View>
             </View>
           ) : null}
           <AppText variant="small" color="textMuted">
@@ -190,6 +212,7 @@ function Figure({ parts, viewBox, aspect, loads, label }: FigureView & { loads: 
 }
 
 const styles = StyleSheet.create({
+  toggle: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
   bodies: { flexDirection: 'row', gap: Space.md },
   figure: { width: '100%', maxWidth: 160 },
   rowHead: { flexDirection: 'row', alignItems: 'baseline', gap: Space.sm },

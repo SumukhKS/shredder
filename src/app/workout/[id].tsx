@@ -148,7 +148,7 @@ export default function WorkoutDetail() {
           headerRight: () => <IconButton icon="ellipsis-vertical" label="Workout options" onPress={() => setMenu(true)} />,
         }}
       />
-      <WorkoutHeader workout={data} onEdit={edit} />
+      <WorkoutHeader workout={data} />
 
       <Card style={styles.strip}>
         <Stat icon="stopwatch-outline" label="Duration" value={formatDuration(data.duration_s)} />
@@ -247,11 +247,6 @@ export default function WorkoutDetail() {
         );
       })}
 
-      <View style={styles.actions}>
-        <Button label="Repeat" icon="repeat" variant="secondary" onPress={() => repeat(exercises)} style={{ flex: 1 }} />
-        <Button label="Edit" icon="create-outline" variant="secondary" onPress={edit} style={{ flex: 1 }} />
-      </View>
-
       <MenuSheet
         visible={menu}
         title={data.name}
@@ -299,5 +294,4 @@ const styles = StyleSheet.create({
   tr: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, paddingVertical: 8, paddingHorizontal: Space.md },
   colSet: { width: 32 },
   colRm: { width: 64, textAlign: 'right' },
-  actions: { flexDirection: 'row', gap: Space.md },
 });

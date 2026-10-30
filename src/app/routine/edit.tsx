@@ -1,9 +1,10 @@
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Platform, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 import Animated, { useAnimatedRef } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { MenuSheet } from '@/components/menu-sheet';
 import { Sortable } from '@/components/sortable';
 import { Button, IconButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -13,21 +14,39 @@ import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Fonts, Space } from '@/constants/theme';
 import { enqueue } from '@/lib/outbox';
-import { fetchRoutines, MUSCLE_LABELS, saveRoutine } from '@/lib/workouts';
+import { readCache } from '@/lib/use-query';
+import { cleanInteger } from '@/lib/validate';
+import { fetchRoutines, MUSCLE_LABELS, routinesWithWaiting, routineTargets, saveRoutine } from '@/lib/workouts';
 import { usePicker } from '@/stores/picker';
-import type { Exercise } from '@/types/db';
+import type { Exercise, Routine } from '@/types/db';
+
+interface SetRow {
+  key: string;
+  reps: string;
+}
 
 interface Row {
   key: string;
   exercise: Exercise;
-  sets: number;
-  reps: string;
+  sets: SetRow[];
   rest: number;
+  restOn: boolean;
 }
+
+const REST_LENGTHS: [string, number][] = [
+  ['60 seconds', 60],
+  ['90 seconds', 90],
+  ['2 minutes', 120],
+  ['3 minutes', 180],
+];
+
+const MAX_TARGET = 1000;
 
 let n = 0;
 const key = () => `r${n++}`;
 const rowKey = (r: Row) => r.key;
+const blankSet = (): SetRow => ({ key: key(), reps: '' });
+const targetLabel = (e: Exercise) => (e.kind === 'duration' ? 'Seconds' : e.kind === 'distance_time' ? 'Minutes' : 'Reps');
 
 export default function RoutineEditor() {
   const c = useColors();
@@ -38,25 +57,29 @@ export default function RoutineEditor() {
   const [name, setName] = useState('');
   const [rows, setRows] = useState<Row[]>([]);
   const [saving, setSaving] = useState(false);
+  const [restFor, setRestFor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
 
   useEffect(() => {
     if (!id) return;
-    fetchRoutines().then((all) => {
-      const r = all.find((x) => x.id === id);
-      if (!r) return;
-      setName(r.name);
-      setRows(
-        r.routine_exercises.map((re) => ({
-          key: key(),
-          exercise: re.exercises,
-          sets: re.target_sets,
-          reps: re.target_reps,
-          rest: re.rest_seconds,
-        }))
-      );
-    });
+    // Without a connection, the last routines loaded are still there to edit.
+    fetchRoutines()
+      .catch(() => readCache<Routine[]>('routines|') ?? [])
+      .then((all) => {
+        const r = routinesWithWaiting(all).find((x) => x.id === id);
+        if (!r) return;
+        setName(r.name);
+        setRows(
+          r.routine_exercises.map((re) => ({
+            key: key(),
+            exercise: re.exercises,
+            sets: routineTargets(re).map((t) => ({ key: key(), reps: t == null ? '' : String(t) })),
+            rest: re.rest_seconds || 90,
+            restOn: re.rest_enabled !== false && re.rest_seconds > 0,
+          }))
+        );
+      });
   }, [id]);
 
   // Pick up exercises chosen in the picker modal
@@ -64,10 +87,7 @@ export default function RoutineEditor() {
     useCallback(() => {
       const picked = take();
       if (picked?.length) {
-        setRows((r) => [
-          ...r,
-          ...picked.map((e) => ({ key: key(), exercise: e, sets: 3, reps: e.kind === 'duration' ? '60s' : '8-12', rest: 90 })),
-        ]);
+        setRows((r) => [...r, ...picked.map((e) => ({ key: key(), exercise: e, sets: [blankSet()], rest: 90, restOn: true }))]);
       }
     }, [take])
   );
@@ -78,6 +98,9 @@ export default function RoutineEditor() {
   async function save() {
     if (!name.trim()) return setError('Give the routine a name.');
     if (rows.length === 0) return setError('Add at least one exercise.');
+    if (rows.some((r) => r.sets.some((x) => Number(x.reps) > MAX_TARGET))) {
+      return setError(`Set targets can be at most ${MAX_TARGET.toLocaleString()}.`);
+    }
     setSaving(true);
     setError(null);
     try {
@@ -87,9 +110,11 @@ export default function RoutineEditor() {
         shown: rows.map((r) => r.exercise),
         exercises: rows.map((r) => ({
           exercise_id: r.exercise.id,
-          target_sets: r.sets,
-          target_reps: r.reps.trim() || '8-12',
+          target_sets: r.sets.length,
+          target_reps: r.sets[0].reps || '8-12',
           rest_seconds: r.rest,
+          rest_enabled: r.restOn,
+          set_targets: r.sets.map((x) => ({ reps: x.reps ? Number(x.reps) : null })),
         })),
       });
       router.back();
@@ -128,10 +153,7 @@ export default function RoutineEditor() {
       <Field label="Name" value={name} onChangeText={setName} placeholder="Push day" error={error} />
 
       {rows.length === 0 ? (
-        <EmptyState
-          title="Add your exercises"
-          body="Pick the moves for this day. You can set target sets, reps and rest for each."
-        />
+        <EmptyState title="Add your exercises" body="Pick the moves for this day, then add a row for each set with its target." />
       ) : null}
 
       <Sortable
@@ -158,24 +180,57 @@ export default function RoutineEditor() {
                 onPress={() => setRows((x) => x.filter((y) => y.key !== r.key))}
               />
             </View>
-            <View style={styles.row}>
-              <Stepper label="Sets" value={r.sets} onChange={(v) => update(r.key, { sets: Math.min(10, Math.max(1, v)) })} />
-              <View style={{ flex: 1, gap: 4 }}>
-                <AppText variant="small" color="textMuted">
-                  Reps
+            {r.sets.map((x, i) => (
+              <View key={x.key} style={styles.row}>
+                <AppText variant="bodyBold" color="textMuted" style={styles.setNo}>
+                  {i + 1}
                 </AppText>
                 <TextInput
-                  value={r.reps}
-                  onChangeText={(t) => update(r.key, { reps: t })}
-                  style={[styles.reps, { color: c.text, borderColor: c.hairline, backgroundColor: c.bg }]}
+                  value={x.reps}
+                  onChangeText={(t) =>
+                    update(r.key, {
+                      sets: r.sets.map((y) => (y.key === x.key ? { ...y, reps: cleanInteger(t).slice(0, 4) } : y)),
+                    })
+                  }
+                  keyboardType="number-pad"
+                  accessibilityLabel={`${targetLabel(r.exercise)} for set ${i + 1}`}
+                  placeholder={targetLabel(r.exercise)}
+                  placeholderTextColor={c.textMuted}
+                  style={[styles.reps, { flex: 1, color: c.text, borderColor: c.hairline, backgroundColor: c.bg }]}
                 />
+                {r.sets.length > 1 ? (
+                  <IconButton
+                    icon="close"
+                    size={18}
+                    label={`Delete set ${i + 1}`}
+                    onPress={() => update(r.key, { sets: r.sets.filter((y) => y.key !== x.key) })}
+                  />
+                ) : null}
               </View>
-              <Stepper
-                label="Rest"
-                value={r.rest}
-                display={r.rest ? `${r.rest}s` : 'Off'}
-                onChange={(v) => update(r.key, { rest: Math.min(300, Math.max(0, v)) })}
-                step={15}
+            ))}
+            <Button
+              label="Add set"
+              icon="add"
+              variant="secondary"
+              size="sm"
+              onPress={() => update(r.key, { sets: [...r.sets, blankSet()] })}
+            />
+            <View style={styles.row}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Change rest length"
+                onPress={() => setRestFor(r.key)}
+                style={{ flex: 1 }}>
+                <AppText variant="small" color="textMuted">
+                  Rest timer{r.restOn ? `, ${r.rest}s (tap to change)` : ', off'}
+                </AppText>
+              </Pressable>
+              <Switch
+                accessibilityLabel={`Rest timer for ${r.exercise.name}`}
+                value={r.restOn}
+                onValueChange={(on) => update(r.key, { restOn: on })}
+                trackColor={{ true: c.primary, false: c.border }}
+                thumbColor={c.text}
               />
             </View>
           </Card>
@@ -189,37 +244,18 @@ export default function RoutineEditor() {
         onPress={() => router.push({ pathname: '/workout/exercises', params: { mode: 'routine' } })}
       />
       {id ? <Button label="Delete routine" variant="danger" onPress={remove} /> : null}
+      <MenuSheet
+        visible={restFor !== null}
+        title="Rest length"
+        onClose={() => setRestFor(null)}
+        options={REST_LENGTHS.map(([label, secs]) => ({
+          label,
+          icon: 'timer-outline' as const,
+          selected: rows.find((r) => r.key === restFor)?.rest === secs,
+          onPress: () => restFor && update(restFor, { rest: secs }),
+        }))}
+      />
     </Screen>
-  );
-}
-
-function Stepper({
-  label,
-  value,
-  onChange,
-  step = 1,
-  display,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  step?: number;
-  display?: string;
-}) {
-  const c = useColors();
-  return (
-    <View style={{ gap: 4 }}>
-      <AppText variant="small" color="textMuted">
-        {label}
-      </AppText>
-      <View style={[styles.stepper, { borderColor: c.hairline, backgroundColor: c.bg }]}>
-        <IconButton icon="remove" size={18} label={`Fewer ${label}`} onPress={() => onChange(value - step)} />
-        <AppText variant="bodyBold" style={{ minWidth: 34 }} align="center">
-          {display ?? value}
-        </AppText>
-        <IconButton icon="add" size={18} label={`More ${label}`} onPress={() => onChange(value + step)} />
-      </View>
-    </View>
   );
 }
 
@@ -238,6 +274,6 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
     textAlignVertical: 'center',
   },
-  stepper: { flexDirection: 'row', alignItems: 'center', height: 40, borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 2 },
+  setNo: { width: 22, textAlign: 'center' },
   footer: { paddingHorizontal: Space.lg, paddingTop: Space.lg, borderTopWidth: 1 },
 });

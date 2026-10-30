@@ -170,7 +170,7 @@ export default function ProfileTab() {
           {formatVolume(d?.dash.week.volume ?? 0, u)} lifted. Best run: {d?.bestWeekStreak ?? 0} weeks in a row.
         </AppText>
         {d?.dash.week.exercises.length ? (
-          <MuscleMap exercises={d.dash.week.exercises} />
+          <MuscleMap exercises={d.dash.week.exercises} startOpen />
         ) : (
           <AppText color="textMuted">Train this week and the muscles you work light up here.</AppText>
         )}

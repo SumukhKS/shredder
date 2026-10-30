@@ -62,6 +62,9 @@ export interface RoutineExercise {
   target_sets: number;
   target_reps: string;
   rest_seconds: number;
+  /** One entry per set. Null on routines from before set rows: use `routineTargets`. */
+  set_targets?: { reps: number | null }[] | null;
+  rest_enabled?: boolean;
   exercises: Exercise;
 }
 
