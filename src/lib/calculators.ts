@@ -48,6 +48,64 @@ export function navyBodyFat(sex: Sex, heightCm: number, neckCm: number, waistCm:
   return Number.isFinite(pct) && pct > 0 && pct < 75 ? Math.round(pct * 10) / 10 : null;
 }
 
+export type SkinfoldMethod = 'jp3' | 'jp7' | 'dw4';
+
+/** The skinfold sites each method measures, in millimetres. */
+export function skinfoldSites(method: SkinfoldMethod, sex: Sex): string[] {
+  if (method === 'jp7') return ['Chest', 'Midaxillary', 'Triceps', 'Subscapular', 'Abdomen', 'Suprailiac', 'Thigh'];
+  if (method === 'dw4') return ['Biceps', 'Triceps', 'Subscapular', 'Suprailiac'];
+  return sex === 'male' ? ['Chest', 'Abdomen', 'Thigh'] : ['Triceps', 'Suprailiac', 'Thigh'];
+}
+
+// Durnin-Womersley (1974) by age band: [up to this age, intercept, slope].
+const DW_MALE = [
+  [19, 1.162, 0.063],
+  [29, 1.1631, 0.0632],
+  [39, 1.1422, 0.0544],
+  [49, 1.162, 0.07],
+  [Infinity, 1.1715, 0.0779],
+];
+const DW_FEMALE = [
+  [19, 1.1549, 0.0678],
+  [29, 1.1599, 0.0717],
+  [39, 1.1423, 0.0632],
+  [49, 1.1333, 0.0612],
+  [Infinity, 1.1339, 0.0645],
+];
+
+/**
+ * Body fat % from caliper readings (mm): Jackson-Pollock 3 or 7 site, or Durnin-Womersley 4 site,
+ * with density turned into a percentage by the Siri equation. Null until every site has a reading.
+ */
+export function skinfoldBodyFat(method: SkinfoldMethod, sex: Sex, age: number, mm: number[]): number | null {
+  if (age <= 0 || mm.length !== skinfoldSites(method, sex).length || mm.some((v) => !(v > 0))) return null;
+  const sum = mm.reduce((a, b) => a + b, 0);
+  let density: number;
+  if (method === 'jp3') {
+    density =
+      sex === 'male'
+        ? 1.10938 - 0.0008267 * sum + 0.0000016 * sum ** 2 - 0.0002574 * age
+        : 1.0994921 - 0.0009929 * sum + 0.0000023 * sum ** 2 - 0.0001392 * age;
+  } else if (method === 'jp7') {
+    density =
+      sex === 'male'
+        ? 1.112 - 0.00043499 * sum + 0.00000055 * sum ** 2 - 0.00028826 * age
+        : 1.097 - 0.00046971 * sum + 0.00000056 * sum ** 2 - 0.00012828 * age;
+  } else {
+    const [, c, m] = (sex === 'male' ? DW_MALE : DW_FEMALE).find(([upTo]) => age <= upTo)!;
+    density = c - m * Math.log10(sum);
+  }
+  const pct = 495 / density - 450;
+  return Number.isFinite(pct) && pct > 0 && pct < 75 ? Math.round(pct * 10) / 10 : null;
+}
+
+/** Body fat % estimated from BMI, Deurenberg (1991). The roughest method: it can't see muscle. */
+export function bmiBodyFat(sex: Sex, age: number, heightCm: number, weightKg: number): number | null {
+  if (age <= 0 || heightCm <= 0 || weightKg <= 0) return null;
+  const pct = 1.2 * (weightKg / (heightCm / 100) ** 2) + 0.23 * age - 10.8 * (sex === 'male' ? 1 : 0) - 5.4;
+  return Number.isFinite(pct) && pct > 0 && pct < 75 ? Math.round(pct * 10) / 10 : null;
+}
+
 export function bodyFatCategory(sex: Sex, pct: number) {
   const [essential, athlete, fit, average] = sex === 'male' ? [6, 14, 18, 25] : [14, 21, 25, 32];
   if (pct < essential) return 'Essential fat';

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Chip, ChipRow, Segmented } from '@/components/ui/chips';
 import { Field } from '@/components/ui/field';
@@ -9,6 +10,7 @@ import { AppText } from '@/components/ui/text';
 import { Space } from '@/constants/theme';
 import {
   bmi,
+  bmiBodyFat,
   bmiCategory,
   bmr,
   bmrLean,
@@ -20,10 +22,15 @@ import {
   navyBodyFat,
   oneRepMax,
   PERCENT_REPS,
+  skinfoldBodyFat,
+  skinfoldSites,
+  type SkinfoldMethod,
   waterMl,
 } from '@/lib/calculators';
 import { ACTIVITY, computeTargets, GOALS } from '@/lib/nutrition';
-import { ageFrom } from '@/lib/profile';
+import { ageFrom, saveBodyMetrics } from '@/lib/profile';
+import { toDay } from '@/lib/dates';
+import { cleanDecimal } from '@/lib/validate';
 import { formatWeight, fromCm, fromKg, toCm, toKg, useUnits } from '@/lib/units';
 import { useSession } from '@/stores/session';
 import type { ActivityLevel, Goal, Sex } from '@/types/db';
@@ -40,10 +47,27 @@ const CALCS: { key: Calc; label: string }[] = [
   { key: 'water', label: 'Water' },
 ];
 
+type FatMethod = 'navy' | SkinfoldMethod | 'bmi';
+const FAT_METHODS: { key: FatMethod; label: string; note: string }[] = [
+  {
+    key: 'navy',
+    label: 'U.S. Navy (tape)',
+    note: 'Measure the neck below the larynx and the waist at the navel (women: at the narrowest point, and the hips at the widest).',
+  },
+  { key: 'jp3', label: 'Caliper: 3 site', note: 'Jackson-Pollock. Take readings on the right side, in millimetres.' },
+  { key: 'jp7', label: 'Caliper: 7 site', note: 'Jackson-Pollock. Take readings on the right side, in millimetres.' },
+  { key: 'dw4', label: 'Caliper: 4 site', note: 'Durnin-Womersley. Take readings on the right side, in millimetres.' },
+  {
+    key: 'bmi',
+    label: 'BMI estimate',
+    note: "Deurenberg. The roughest method: it can't tell muscle from fat, so it reads high if you carry a lot of muscle.",
+  },
+];
+
 const round1 = (n: number) => String(Math.round(n * 10) / 10);
 const num = (s: string) => Number(s.replace(',', '.')) || 0;
 
-/** Settings > Calculators. Starts from your profile; nothing here is saved. */
+/** Settings > Calculators. Starts from your profile; only a body fat result you choose to save is kept. */
 export default function Calculators() {
   const profile = useSession((s) => s.profile);
   const units = useUnits();
@@ -60,6 +84,9 @@ export default function Calculators() {
   const [weight, setWeight] = useState(() => (profile?.weight_kg ? round1(fromKg(Number(profile.weight_kg), units.weight)) : ''));
   const [activity, setActivity] = useState<ActivityLevel>(profile?.activity_level ?? 'moderate');
   const [goal, setGoal] = useState<Goal>(profile?.goal ?? 'maintain');
+  const [fatMethod, setFatMethod] = useState<FatMethod>('navy');
+  const [skinfolds, setSkinfolds] = useState<Record<string, string>>({});
+  const [savedFat, setSavedFat] = useState<number | null>(null);
   const [neck, setNeck] = useState('');
   const [waist, setWaist] = useState('');
   const [hips, setHips] = useState('');
@@ -76,7 +103,12 @@ export default function Calculators() {
   const len = (v: string) => toCm(num(v), units.length);
   const needs = { sex: true, age: false, height: false, weight: false };
   if (calc === 'calories' || calc === 'bmr') Object.assign(needs, { age: true, height: true, weight: true });
-  if (calc === 'bodyfat' || calc === 'ideal') needs.height = true;
+  if (calc === 'ideal') needs.height = true;
+  if (calc === 'bodyfat') {
+    needs.height = fatMethod === 'navy' || fatMethod === 'bmi';
+    needs.age = fatMethod !== 'navy';
+    needs.weight = fatMethod === 'bmi';
+  }
   if (calc === 'bmi') Object.assign(needs, { height: true, weight: true, sex: false });
   if (calc === 'water') Object.assign(needs, { weight: true, sex: false });
   if (calc === '1rm' || calc === 'macros') needs.sex = false;
@@ -188,40 +220,86 @@ export default function Calculators() {
 
       {calc === 'bodyfat' ? (
         <>
-          <View style={styles.row}>
-            <View style={{ flex: 1 }}>
-              <Field label="Neck" value={neck} onChangeText={setNeck} keyboardType="decimal-pad" suffix={units.length} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Field label="Waist" value={waist} onChangeText={setWaist} keyboardType="decimal-pad" suffix={units.length} />
-            </View>
-            {sex === 'female' ? (
+          <ChipRow>
+            {FAT_METHODS.map((m) => (
+              <Chip key={m.key} label={m.label} selected={fatMethod === m.key} onPress={() => setFatMethod(m.key)} />
+            ))}
+          </ChipRow>
+          {fatMethod === 'navy' ? (
+            <View style={styles.row}>
               <View style={{ flex: 1 }}>
-                <Field label="Hips" value={hips} onChangeText={setHips} keyboardType="decimal-pad" suffix={units.length} />
+                <Field label="Neck" value={neck} onChangeText={setNeck} keyboardType="decimal-pad" suffix={units.length} />
               </View>
-            ) : null}
-          </View>
+              <View style={{ flex: 1 }}>
+                <Field label="Waist" value={waist} onChangeText={setWaist} keyboardType="decimal-pad" suffix={units.length} />
+              </View>
+              {sex === 'female' ? (
+                <View style={{ flex: 1 }}>
+                  <Field label="Hips" value={hips} onChangeText={setHips} keyboardType="decimal-pad" suffix={units.length} />
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+          {fatMethod === 'jp3' || fatMethod === 'jp7' || fatMethod === 'dw4'
+            ? skinfoldSites(fatMethod, sex).map((site) => (
+                <Field
+                  key={site}
+                  label={site}
+                  value={skinfolds[site] ?? ''}
+                  onChangeText={(v) => setSkinfolds((all) => ({ ...all, [site]: cleanDecimal(v) }))}
+                  keyboardType="decimal-pad"
+                  suffix="mm"
+                />
+              ))
+            : null}
           <AppText variant="small" color="textMuted">
-            U.S. Navy tape method. Measure the neck below the larynx, the waist at the navel
-            {sex === 'female' ? ' (women: at the narrowest point), and the hips at the widest' : ''}.
+            {FAT_METHODS.find((m) => m.key === fatMethod)?.note}
           </AppText>
           {(() => {
-            const pct = cm > 0 ? navyBodyFat(sex, cm, len(neck), len(waist), len(hips)) : null;
+            const pct =
+              fatMethod === 'navy'
+                ? cm > 0
+                  ? navyBodyFat(sex, cm, len(neck), len(waist), len(hips))
+                  : null
+                : fatMethod === 'bmi'
+                  ? bmiBodyFat(sex, ageN, cm, kg)
+                  : skinfoldBodyFat(
+                      fatMethod,
+                      sex,
+                      ageN,
+                      skinfoldSites(fatMethod, sex).map((site) => num(skinfolds[site] ?? ''))
+                    );
             return pct != null ? (
-              <Result
-                big={`${pct}%`}
-                caption={bodyFatCategory(sex, pct)}
-                lines={
-                  kg > 0
-                    ? [
-                        ['Fat mass', formatWeight((kg * pct) / 100, units.weight)],
-                        ['Lean mass', formatWeight(kg * (1 - pct / 100), units.weight)],
-                      ]
-                    : []
+              <>
+                <Result
+                  big={`${pct}%`}
+                  caption={bodyFatCategory(sex, pct)}
+                  lines={
+                    kg > 0
+                      ? [
+                          ['Fat mass', formatWeight((kg * pct) / 100, units.weight)],
+                          ['Lean mass', formatWeight(kg * (1 - pct / 100), units.weight)],
+                        ]
+                      : []
+                  }
+                />
+                <Button
+                  label={savedFat === pct ? 'Saved to Measurements' : 'Save to Measurements'}
+                  icon={savedFat === pct ? 'checkmark' : 'body-outline'}
+                  variant="secondary"
+                  disabled={savedFat === pct || !profile}
+                  onPress={() => {
+                    saveBodyMetrics(profile!.id, toDay(), { body_fat_pct: pct });
+                    setSavedFat(pct);
+                  }}
+                />
+              </>
+            ) : (
+              <Missing
+                what={
+                  fatMethod === 'navy' ? 'height, neck and waist' : fatMethod === 'bmi' ? undefined : 'your age and every site'
                 }
               />
-            ) : (
-              <Missing what="height, neck and waist" />
             );
           })()}
         </>

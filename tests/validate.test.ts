@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { bmiBodyFat, skinfoldBodyFat } from '../src/lib/calculators';
 import { computeTargets } from '../src/lib/nutrition';
 import { recipeAsFood, recipeTotals } from '../src/lib/recipe-math';
 import { cleanDecimal, cleanInteger, foodProblem, parseAmount, withinLimit } from '../src/lib/validate';
@@ -103,4 +104,15 @@ test('a recipe logs by the serving with the right numbers', () => {
   assert.equal(empty.kcal_100g, 0);
   // Strings from the database add up as numbers.
   assert.equal(recipeTotals([{ grams: '10.5', kcal: '20', protein: '1', carbs: '2', fat: '3' } as never]).grams, 10.5);
+});
+
+test('body fat methods match the published formulas', () => {
+  assert.equal(skinfoldBodyFat('jp3', 'male', 30, [20, 25, 15]), 17.9);
+  assert.equal(skinfoldBodyFat('dw4', 'male', 25, [5, 10, 12, 13]), 16.2);
+  assert.equal(bmiBodyFat('male', 30, 200, 100), 20.7);
+  // Missing readings and impossible input give no result rather than a wrong one.
+  assert.equal(skinfoldBodyFat('jp3', 'male', 30, [20, 0, 15]), null);
+  assert.equal(skinfoldBodyFat('jp7', 'female', 30, [10, 10]), null);
+  assert.equal(skinfoldBodyFat('jp3', 'female', 0, [10, 10, 10]), null);
+  assert.equal(bmiBodyFat('female', 30, 0, 60), null);
 });
