@@ -160,7 +160,6 @@ export default function WorkoutDetail() {
         <Stat icon="trophy-outline" label="PRs" value={String(prCount)} />
       </Card>
 
-      <SectionHeader title="Muscles worked" />
       <Card>
         <MuscleMap
           exercises={exercises.map((we) => ({
