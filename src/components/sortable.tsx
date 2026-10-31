@@ -304,7 +304,11 @@ function Item({
     return {
       zIndex: held || lift.value > 0 ? 10 : 0,
       opacity: placed.value ? 1 : 0,
-      transform: [{ translateX: left }, { translateY: top }, { scale: 1 + lift.value * 0.03 }],
+      // Real layout positions, not a translate: Android ignores transforms when it scrolls a focused
+      // text box into view, so with a translate every box looked to be at the top of the list.
+      left,
+      top,
+      transform: [{ scale: 1 + lift.value * 0.03 }],
       shadowOpacity: lift.value * 0.35,
       elevation: lift.value * 12,
     };
@@ -312,7 +316,7 @@ function Item({
 
   const body = (
     <Animated.View
-      style={[{ position: 'absolute', left: 0, top: 0, width: rect.w, shadowColor: '#000', shadowRadius: 16 }, style]}
+      style={[{ position: 'absolute', width: rect.w, shadowColor: '#000', shadowRadius: 16 }, style]}
       onLayout={(e) => onHeight(Math.round(e.nativeEvent.layout.height))}>
       {render(handle)}
     </Animated.View>

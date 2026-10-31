@@ -4,9 +4,9 @@ import { StyleSheet, View } from 'react-native';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Chip, ChipRow, Segmented } from '@/components/ui/chips';
-import { Field } from '@/components/ui/field';
 import { Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
+import { WheelField } from '@/components/ui/wheel-field';
 import { Space } from '@/constants/theme';
 import {
   bmi,
@@ -30,7 +30,6 @@ import {
 import { ACTIVITY, computeTargets, GOALS } from '@/lib/nutrition';
 import { ageFrom, saveBodyMetrics } from '@/lib/profile';
 import { toDay } from '@/lib/dates';
-import { cleanDecimal } from '@/lib/validate';
 import { formatWeight, fromCm, fromKg, toCm, toKg, useUnits } from '@/lib/units';
 import { useSession } from '@/stores/session';
 import type { ActivityLevel, Goal, Sex } from '@/types/db';
@@ -63,6 +62,14 @@ const FAT_METHODS: { key: FatMethod; label: string; note: string }[] = [
     note: "Deurenberg. The roughest method: it can't tell muscle from fat, so it reads high if you carry a lot of muscle.",
   },
 ];
+
+// Wheel ranges, in the unit shown.
+const WEIGHT = { kg: { min: 30, max: 250, step: 0.5, start: 70 }, lb: { min: 60, max: 550, step: 1, start: 155 } };
+const LIFT = { kg: { min: 1, max: 500, step: 0.5, start: 60 }, lb: { min: 1, max: 1100, step: 1, start: 135 } };
+const HEIGHT = { cm: { min: 100, max: 250, step: 1, start: 170 }, in: { min: 40, max: 100, step: 0.5, start: 67 } };
+const NECK = { cm: { min: 20, max: 70, step: 0.5, start: 38 }, in: { min: 8, max: 28, step: 0.25, start: 15 } };
+const WAIST = { cm: { min: 40, max: 200, step: 0.5, start: 85 }, in: { min: 16, max: 80, step: 0.25, start: 33 } };
+const HIPS = { cm: { min: 50, max: 200, step: 0.5, start: 95 }, in: { min: 20, max: 80, step: 0.25, start: 37 } };
 
 const round1 = (n: number) => String(Math.round(n * 10) / 10);
 const num = (s: string) => Number(s.replace(',', '.')) || 0;
@@ -135,17 +142,17 @@ export default function Calculators() {
       <View style={styles.row}>
         {needs.age ? (
           <View style={{ flex: 1 }}>
-            <Field label="Age" value={age} onChangeText={setAge} keyboardType="number-pad" suffix="yrs" />
+            <WheelField label="Age" value={age} onChange={setAge} min={13} max={100} start={25} suffix="yrs" />
           </View>
         ) : null}
         {needs.height ? (
           <View style={{ flex: 1 }}>
-            <Field label="Height" value={height} onChangeText={setHeight} keyboardType="decimal-pad" suffix={units.length} />
+            <WheelField label="Height" value={height} onChange={setHeight} {...HEIGHT[units.length]} suffix={units.length} />
           </View>
         ) : null}
         {needs.weight ? (
           <View style={{ flex: 1 }}>
-            <Field label="Weight" value={weight} onChangeText={setWeight} keyboardType="decimal-pad" suffix={units.weight} />
+            <WheelField label="Weight" value={weight} onChange={setWeight} {...WEIGHT[units.weight]} suffix={units.weight} />
           </View>
         ) : null}
       </View>
@@ -190,7 +197,16 @@ export default function Calculators() {
 
       {calc === 'macros' ? (
         <>
-          <Field label="Calories" value={calories} onChangeText={setCalories} keyboardType="number-pad" suffix="kcal" />
+          <WheelField
+            label="Calories"
+            value={calories}
+            onChange={setCalories}
+            min={800}
+            max={10000}
+            step={10}
+            start={2000}
+            suffix="kcal"
+          />
           <ChipRow>
             {MACRO_PRESETS.map((p) => (
               <Chip key={p.key} label={p.label} selected={preset === p.key} onPress={() => setPreset(p.key)} />
@@ -228,26 +244,29 @@ export default function Calculators() {
           {fatMethod === 'navy' ? (
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
-                <Field label="Neck" value={neck} onChangeText={setNeck} keyboardType="decimal-pad" suffix={units.length} />
+                <WheelField label="Neck" value={neck} onChange={setNeck} {...NECK[units.length]} suffix={units.length} />
               </View>
               <View style={{ flex: 1 }}>
-                <Field label="Waist" value={waist} onChangeText={setWaist} keyboardType="decimal-pad" suffix={units.length} />
+                <WheelField label="Waist" value={waist} onChange={setWaist} {...WAIST[units.length]} suffix={units.length} />
               </View>
               {sex === 'female' ? (
                 <View style={{ flex: 1 }}>
-                  <Field label="Hips" value={hips} onChangeText={setHips} keyboardType="decimal-pad" suffix={units.length} />
+                  <WheelField label="Hips" value={hips} onChange={setHips} {...HIPS[units.length]} suffix={units.length} />
                 </View>
               ) : null}
             </View>
           ) : null}
           {fatMethod === 'jp3' || fatMethod === 'jp7' || fatMethod === 'dw4'
             ? skinfoldSites(fatMethod, sex).map((site) => (
-                <Field
+                <WheelField
                   key={site}
                   label={site}
                   value={skinfolds[site] ?? ''}
-                  onChangeText={(v) => setSkinfolds((all) => ({ ...all, [site]: cleanDecimal(v) }))}
-                  keyboardType="decimal-pad"
+                  onChange={(v) => setSkinfolds((all) => ({ ...all, [site]: v }))}
+                  min={1}
+                  max={80}
+                  step={0.5}
+                  start={15}
                   suffix="mm"
                 />
               ))
@@ -328,11 +347,15 @@ export default function Calculators() {
 
       {calc === 'bmr' ? (
         <>
-          <Field
+          <WheelField
             label="Body fat (optional)"
             value={bodyFat}
-            onChangeText={setBodyFat}
-            keyboardType="decimal-pad"
+            onChange={setBodyFat}
+            min={3}
+            max={60}
+            step={0.5}
+            start={20}
+            clearable
             suffix="%"
             hint="With body fat, the lean-mass formula (Katch-McArdle) is shown too."
           />
@@ -352,10 +375,10 @@ export default function Calculators() {
         <>
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
-              <Field label="Weight lifted" value={lift} onChangeText={setLift} keyboardType="decimal-pad" suffix={units.weight} />
+              <WheelField label="Weight lifted" value={lift} onChange={setLift} {...LIFT[units.weight]} suffix={units.weight} />
             </View>
             <View style={{ flex: 1 }}>
-              <Field label="Reps" value={reps} onChangeText={setReps} keyboardType="number-pad" />
+              <WheelField label="Reps" value={reps} onChange={setReps} min={1} max={30} start={5} />
             </View>
           </View>
           {num(lift) > 0 && num(reps) > 0 ? (
@@ -398,7 +421,7 @@ export default function Calculators() {
 
       {calc === 'water' ? (
         <>
-          <Field label="Training a day" value={training} onChangeText={setTraining} keyboardType="decimal-pad" suffix="hours" />
+          <WheelField label="Training a day" value={training} onChange={setTraining} min={0} max={8} step={0.25} suffix="hours" />
           {kg > 0 ? (
             <Result
               big={`${(waterMl(kg, num(training)) / 1000).toLocaleString()} L`}
@@ -444,7 +467,7 @@ function Result({ big, caption, lines, note }: { big: string; caption: string; l
 function Missing({ what = 'your age, height and weight' }: { what?: string }) {
   return (
     <AppText variant="small" color="textMuted">
-      Enter {what} to see the result.
+      Choose {what} to see the result.
     </AppText>
   );
 }

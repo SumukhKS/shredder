@@ -3,9 +3,9 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { OptionCard } from '@/components/ui/chips';
-import { Field } from '@/components/ui/field';
 import { Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
+import { WheelField } from '@/components/ui/wheel-field';
 import { Space } from '@/constants/theme';
 import { ageFrom } from '@/lib/profile';
 import { ACTIVITY, computeTargets, DEFAULT_SPLIT, GOALS, macroSplit, scaleMacros } from '@/lib/nutrition';
@@ -32,7 +32,7 @@ export default function ProfileSettings() {
   }));
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  // The split is remembered while typing calories, so "2", "25", "250"... don't flatten it.
+  // The split is remembered, so changing calories rescales the macros without flattening it.
   const [split, setSplit] = useState(
     () =>
       macroSplit({ protein: profile?.protein_g ?? 0, carbs: profile?.carbs_g ?? 0, fat: profile?.fat_g ?? 0 }) ?? DEFAULT_SPLIT
@@ -130,7 +130,13 @@ export default function ProfileSettings() {
   return (
     <Screen padTop={false}>
       <SectionHeader title="Body" />
-      <Field label="Height" value={form.height} onChangeText={set('height')} keyboardType="decimal-pad" suffix={lengthUnit} />
+      <WheelField
+        label="Height"
+        value={form.height}
+        onChange={set('height')}
+        {...(lengthUnit === 'cm' ? { min: 100, max: 250, start: 170 } : { min: 40, max: 100, start: 67, step: 0.5 })}
+        suffix={lengthUnit}
+      />
       <AppText variant="smallBold" color="textMuted">
         Goal
       </AppText>
@@ -157,48 +163,76 @@ export default function ProfileSettings() {
       ))}
 
       <SectionHeader title="Nutrition" action={<Button label="Recalculate" size="sm" variant="secondary" onPress={recalc} />} />
-      <Field
+      <WheelField
         label="Calories"
         value={form.calorie_target}
-        onChangeText={setCalories}
-        keyboardType="number-pad"
+        onChange={setCalories}
+        min={800}
+        max={10000}
+        step={10}
+        start={2000}
         suffix="kcal"
         hint={`Protein ${split.protein}%, carbs ${split.carbs}%, fat ${split.fat}% of calories. Change either and the other follows.`}
       />
       <View style={styles.row}>
         <View style={{ flex: 1 }}>
-          <Field
+          <WheelField
             label="Protein"
             value={form.protein_g}
-            onChangeText={setMacro('protein_g')}
-            keyboardType="number-pad"
+            onChange={setMacro('protein_g')}
+            min={0}
+            max={1000}
+            start={150}
             suffix="g"
           />
         </View>
         <View style={{ flex: 1 }}>
-          <Field label="Carbs" value={form.carbs_g} onChangeText={setMacro('carbs_g')} keyboardType="number-pad" suffix="g" />
+          <WheelField
+            label="Carbs"
+            value={form.carbs_g}
+            onChange={setMacro('carbs_g')}
+            min={0}
+            max={1500}
+            start={200}
+            suffix="g"
+          />
         </View>
         <View style={{ flex: 1 }}>
-          <Field label="Fat" value={form.fat_g} onChangeText={setMacro('fat_g')} keyboardType="number-pad" suffix="g" />
+          <WheelField label="Fat" value={form.fat_g} onChange={setMacro('fat_g')} min={0} max={500} start={60} suffix="g" />
         </View>
       </View>
 
       <SectionHeader title="Daily habits" />
-      <Field
+      <WheelField
         label="Water"
         value={form.water_ml_target}
-        onChangeText={set('water_ml_target')}
-        keyboardType="number-pad"
+        onChange={set('water_ml_target')}
+        min={500}
+        max={10000}
+        step={50}
+        start={3000}
         suffix="ml"
       />
-      <Field
+      <WheelField
         label="Steps"
         value={form.steps_target}
-        onChangeText={set('steps_target')}
-        keyboardType="number-pad"
+        onChange={set('steps_target')}
+        min={1000}
+        max={50000}
+        step={500}
+        start={10000}
         suffix="steps"
       />
-      <Field label="Sleep" value={form.sleep_h} onChangeText={set('sleep_h')} keyboardType="decimal-pad" suffix="hours" />
+      <WheelField
+        label="Sleep"
+        value={form.sleep_h}
+        onChange={set('sleep_h')}
+        min={3}
+        max={14}
+        step={0.25}
+        start={8}
+        suffix="hours"
+      />
 
       {message ? (
         <AppText variant="smallBold" color="textMuted">

@@ -13,9 +13,9 @@ import { Field } from '@/components/ui/field';
 import { Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
-import { WeekCalendar } from '@/components/week-calendar';
+import { PickerBox, TimeSheet, WheelSheet, wheelValues } from '@/components/ui/wheel-field';
 import { Fonts, Radius, Space } from '@/constants/theme';
-import { fromDay, toDay } from '@/lib/dates';
+import { dayLabel, formatDuration, fromDay, toDay } from '@/lib/dates';
 import { currentUnits, fromKg, toKg, type WeightUnit } from '@/lib/units';
 import { discardEntry, enqueue, trySend } from '@/lib/outbox';
 import { supabase } from '@/lib/supabase';
@@ -78,16 +78,13 @@ const weightKg = (v: string, unit: WeightUnit) => {
   return x == null ? null : Math.round(toKg(x, unit) * 100) / 100;
 };
 
-/** Total seconds from the hours, minutes and seconds boxes (empty counts as 0); null when one can't be read. */
-function durationSeconds(d: { h: string; m: string; s: string }): number | null {
-  const parts = [d.h, d.m, d.s].map((x) => x.trim() || '0');
-  if (parts.some((x) => !/^\d+$/.test(x))) return null;
-  const [h, m, sec] = parts.map(Number);
-  if (m > 59 || sec > 59) return null;
-  return h * 3600 + m * 60 + sec;
-}
+const START_HOURS = wheelValues(0, 23, 1);
+const START_MINUTES = wheelValues(0, 59, 1);
+const DAYS = wheelValues(1, 31, 1);
+const MONTHS = wheelValues(0, 11, 1);
+const monthName = (m: number) => new Date(2000, m, 1).toLocaleDateString(undefined, { month: 'short' });
 
-/** Fix a workout after it was logged: name, date, start time, duration, exercises and every set. */
+/** Fix a workout after it was logged: name, date, start time, how long it took, exercises and every set. */
 export default function EditWorkout() {
   const c = useColors();
   const router = useRouter();
@@ -99,9 +96,10 @@ export default function EditWorkout() {
   const [name, setName] = useState('');
   const [day, setDay] = useState(toDay());
   const [start, setStart] = useState('');
-  // Duration in hours, minutes and seconds, and the start's seconds, so saving keeps it exact.
-  const [duration, setDuration] = useState({ h: '', m: '', s: '' });
+  // How long it took, and the start's seconds, so saving keeps it exact.
+  const [seconds, setSeconds] = useState(0);
   const [startSeconds, setStartSeconds] = useState(0);
+  const [sheet, setSheet] = useState<'date' | 'start' | 'time' | null>(null);
   // Weights are shown and typed in the unit chosen when the screen opened.
   const [unit] = useState<WeightUnit>(() => currentUnits().weight);
   const [rows, setRows] = useState<EditExercise[]>([]);
@@ -125,7 +123,7 @@ export default function EditWorkout() {
         setStart(`${pad(begin.getHours())}:${pad(begin.getMinutes())}`);
         setStartSeconds(begin.getSeconds());
         const total = Math.max(1, Math.round((new Date(w.finished_at).getTime() - begin.getTime()) / 1000));
-        setDuration({ h: String(Math.floor(total / 3600)), m: String(Math.floor((total % 3600) / 60)), s: String(total % 60) });
+        setSeconds(total);
         setRows(
           [...w.workout_exercises]
             .sort((a, b) => a.position - b.position)
@@ -175,10 +173,8 @@ export default function EditWorkout() {
 
   async function save() {
     const m = /^(\d{1,2})[:.](\d{2})$/.exec(start.trim());
-    const secs = durationSeconds(duration);
-    if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return setError('Enter the start time as HH:MM, e.g. 07:30.');
-    if (secs == null || secs < 1 || secs > 24 * 3600)
-      return setError('Enter how long the workout lasted: hours, minutes (0-59) and seconds (0-59).');
+    if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return setError('Choose a start time.');
+    if (seconds < 1 || seconds > 24 * 3600) return setError('Set how long the workout took.');
     const exercises = rows
       .map((e) => {
         const k = e.exercise.kind;
@@ -201,7 +197,7 @@ export default function EditWorkout() {
 
     const begin = fromDay(day);
     begin.setHours(Number(m[1]), Number(m[2]), startSeconds, 0);
-    const end = new Date(begin.getTime() + secs * 1000);
+    const end = new Date(begin.getTime() + seconds * 1000);
     setSaving(true);
     setError(null);
     const entry = enqueue({
@@ -236,38 +232,51 @@ export default function EditWorkout() {
       <Stack.Screen options={{ title: 'Edit workout' }} />
       <Field label="Name" value={name} onChangeText={setName} placeholder="Push day" />
 
-      <SectionHeader title="Date" />
-      {loaded ? <WeekCalendar day={day} onChange={setDay} kind="workout" /> : null}
-      <Field
-        label="Start time"
-        value={start}
-        onChangeText={setStart}
-        placeholder="07:30"
-        keyboardType="numbers-and-punctuation"
-      />
-
-      <SectionHeader title="Duration" />
+      <PickerBox label="Date" value={loaded ? dayLabel(day) : ''} onPress={() => setSheet('date')} />
       <View style={styles.row}>
-        {(
-          [
-            ['h', 'Hours', 'hr'],
-            ['m', 'Minutes', 'min'],
-            ['s', 'Seconds', 'sec'],
-          ] as const
-        ).map(([k, label, suffix]) => (
-          <View key={k} style={{ flex: 1 }}>
-            <Field
-              label={label}
-              value={duration[k]}
-              onChangeText={(v) => setDuration((d) => ({ ...d, [k]: v.replace(/[^0-9]/g, '') }))}
-              keyboardType="number-pad"
-              maxLength={2}
-              placeholder="0"
-              suffix={suffix}
-            />
-          </View>
-        ))}
+        <View style={{ flex: 1 }}>
+          <PickerBox label="Start time" value={start} onPress={() => setSheet('start')} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <PickerBox label="Time" value={formatDuration(seconds)} onPress={() => setSheet('time')} />
+        </View>
       </View>
+      <TimeSheet visible={sheet === 'time'} seconds={seconds} onClose={() => setSheet(null)} onSave={setSeconds} />
+      <WheelSheet
+        visible={sheet === 'start'}
+        title="Start time"
+        onClose={() => setSheet(null)}
+        columns={[
+          { label: 'Hour', values: START_HOURS, value: Number(start.split(':')[0]) || 0, format: pad, suffix: 'hr' },
+          { label: 'Minute', values: START_MINUTES, value: Number(start.split(':')[1]) || 0, format: pad, suffix: 'min' },
+        ]}
+        onSave={([h, m]) => setStart(`${pad(h)}:${pad(m)}`)}
+      />
+      <WheelSheet
+        visible={sheet === 'date'}
+        title="Date"
+        onClose={() => setSheet(null)}
+        columns={[
+          { label: 'Day', values: DAYS, value: fromDay(day).getDate() },
+          { label: 'Month', values: MONTHS, value: fromDay(day).getMonth(), format: monthName },
+          {
+            label: 'Year',
+            values: wheelValues(
+              fromDay(toDay()).getFullYear() - 10,
+              fromDay(toDay()).getFullYear(),
+              1,
+              fromDay(day).getFullYear()
+            ),
+            value: fromDay(day).getFullYear(),
+          },
+        ]}
+        onSave={([d, m, y]) => {
+          // February has no 31st, and a workout can't be in the future.
+          const lastOfMonth = new Date(y, m + 1, 0).getDate();
+          const picked = toDay(new Date(y, m, Math.min(d, lastOfMonth)));
+          setDay(picked > toDay() ? toDay() : picked);
+        }}
+      />
 
       <SectionHeader title="Exercises" />
       <Sortable

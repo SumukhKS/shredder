@@ -84,6 +84,8 @@ interface WorkoutState {
   start: (routine?: Routine) => Promise<void>;
   startWith: (name: string, exercises: { exercise: Exercise; sets: number }[]) => Promise<void>;
   rename: (name: string) => void;
+  /** Sets how long the workout has run so far; the clock keeps counting from there. */
+  setElapsed: (seconds: number) => void;
   addExercises: (exercises: Exercise[]) => Promise<void>;
   removeExercise: (exKey: string) => void;
   /** Puts the exercises in this order (keys from a drag-and-drop list). */
@@ -349,6 +351,11 @@ export const useWorkout = create<WorkoutState>()(
         },
 
         rename: (name) => set((s) => (s.active ? { active: { ...s.active, name } } : s)),
+
+        setElapsed: (seconds) =>
+          set((s) =>
+            s.active ? { active: { ...s.active, startedAt: new Date(Date.now() - seconds * 1000).toISOString() } } : s
+          ),
 
         addExercises: async (exercises) => {
           const built = exercises.map((e) => buildExercise(e, [], undefined, 0));

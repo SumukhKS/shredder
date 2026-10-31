@@ -19,6 +19,7 @@ import { Sortable } from '@/components/sortable';
 import { EmptyState, GestureScrollView } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
+import { TimeSheet } from '@/components/ui/wheel-field';
 import { Fonts, hardShadow, Radius, Space } from '@/constants/theme';
 import { clock } from '@/lib/dates';
 import { formatVolume, formatWeight, useUnits, weightNumber, type WeightUnit } from '@/lib/units';
@@ -62,6 +63,8 @@ export default function ActiveWorkoutScreen() {
   const [result, setResult] = useState<FinishWorkoutResult | null>(null);
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  // The workout's time when its sheet was opened; null while closed.
+  const [editingTime, setEditingTime] = useState<number | null>(null);
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
 
   if (result) return <Results result={result} onDone={() => router.back()} />;
@@ -102,6 +105,10 @@ export default function ActiveWorkoutScreen() {
       {/* Top bar */}
       <View style={[styles.top, { paddingTop: insets.top + Space.sm, borderColor: c.hairline }]}>
         <IconButton icon="chevron-down" label="Minimise workout" onPress={() => router.back()} />
+        <ElapsedClock
+          startedAt={a.startedAt}
+          onPress={() => setEditingTime(Math.floor((Date.now() - new Date(a.startedAt).getTime()) / 1000))}
+        />
         <View style={{ flex: 1 }} />
         <Button
           label="Finish"
@@ -131,7 +138,6 @@ export default function ActiveWorkoutScreen() {
           accessibilityLabel="Workout name"
           style={[styles.title, { color: c.text }]}
         />
-        <ElapsedClock startedAt={a.startedAt} />
         <View style={styles.stats}>
           <StatPill label="Sets" value={String(sets)} />
           <StatPill label="Volume" value={formatVolume(liveVolume(a), unit)} />
@@ -227,6 +233,12 @@ export default function ActiveWorkoutScreen() {
         onClose={() => setRenaming(false)}
         onSave={w.rename}
       />
+      <TimeSheet
+        visible={editingTime !== null}
+        seconds={editingTime ?? 0}
+        onClose={() => setEditingTime(null)}
+        onSave={w.setElapsed}
+      />
 
       <RestTimer />
       <PrCelebrationHost />
@@ -244,12 +256,21 @@ function useNow() {
   return now;
 }
 
-function ElapsedClock({ startedAt }: { startedAt: string }) {
+function ElapsedClock({ startedAt, onPress }: { startedAt: string; onPress: () => void }) {
+  const c = useColors();
   const now = useNow();
+  const time = clock((now - new Date(startedAt).getTime()) / 1000);
   return (
-    <AppText variant="bodyBold" color="textMuted" style={{ marginTop: -Space.md }}>
-      Duration {clock((now - new Date(startedAt).getTime()) / 1000)}
-    </AppText>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Workout time ${time}. Tap to change it`}
+      onPress={onPress}
+      hitSlop={6}
+      style={[styles.clock, { backgroundColor: c.primarySoft }]}>
+      <AppText variant="bodyBold" color="primary">
+        {time}
+      </AppText>
+    </Pressable>
   );
 }
 
@@ -667,6 +688,7 @@ const styles = StyleSheet.create({
     paddingBottom: Space.md,
     borderBottomWidth: 1,
   },
+  clock: { paddingHorizontal: Space.md, paddingVertical: 6, borderRadius: Radius.chip },
   title: { fontFamily: Fonts.display, fontSize: 28, letterSpacing: -0.5, padding: 0, minWidth: 0 },
   stats: { flexDirection: 'row', gap: Space.sm },
   pill: { flex: 1, borderWidth: 1.5, borderRadius: Radius.row, padding: Space.md, gap: 2 },
