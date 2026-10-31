@@ -13,6 +13,7 @@ import { searchLocalFoods, searchOpenFoodFacts, type FoodCandidate } from '@/lib
 import { suggestMeal } from '@/lib/nutrition';
 import { recipeAsFood } from '@/lib/recipe-math';
 import { fetchRecipes, recipesWithWaiting } from '@/lib/recipes';
+import { rankBySearch } from '@/lib/search-rank';
 import { supabase } from '@/lib/supabase';
 import { readCache, useQuery, writeCache } from '@/lib/use-query';
 import { matchesSearch } from '@/lib/workouts';
@@ -90,9 +91,11 @@ export default function FoodSearch() {
   const q = query.trim();
   const myRecipes = forRecipe
     ? []
-    : (recipes.data ?? [])
-        .filter((r) => r.recipe_items.length && (q === '' || matchesSearch(r.name, q)))
-        .map((r) => recipeAsFood(r) as FoodCandidate);
+    : rankBySearch(
+        (recipes.data ?? []).filter((r) => r.recipe_items.length && (q === '' || matchesSearch(r.name, q))),
+        q,
+        (r) => r.name
+      ).map((r) => recipeAsFood(r) as FoodCandidate);
   const sections = [
     ...(myRecipes.length ? [{ title: 'My recipes', data: myRecipes }] : []),
     ...(query.trim() === '' && recent.length ? [{ title: 'Recent', data: recent as FoodCandidate[] }] : []),

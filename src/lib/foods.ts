@@ -1,3 +1,4 @@
+import { rankBySearch, searchTier } from '@/lib/search-rank';
 import { supabase } from '@/lib/supabase';
 import { readCache } from '@/lib/use-query';
 import { foodProblem } from '@/lib/validate';
@@ -67,12 +68,13 @@ export async function searchLocalFoods(query: string, limit = 25): Promise<Food[
   if (!error) return (data ?? []) as Food[];
   const words = q.toLowerCase().split(/\s+/);
   const seen = new Set<string>();
-  return [...(readCache<Food[]>('recent-foods') ?? []), ...(readCache<Food[]>('my-foods') ?? [])]
-    .filter((f) => words.every((w) => f.name.toLowerCase().includes(w)) && !seen.has(f.id) && !!seen.add(f.id))
-    .slice(0, limit);
+  const saved = [...(readCache<Food[]>('recent-foods') ?? []), ...(readCache<Food[]>('my-foods') ?? [])].filter(
+    (f) => words.every((w) => f.name.toLowerCase().includes(w)) && !seen.has(f.id) && !!seen.add(f.id)
+  );
+  return rankBySearch(saved, q, (f) => f.name).slice(0, limit);
 }
 
-/** Packaged foods from Open Food Facts, products sold in India first. */
+/** Packaged foods from Open Food Facts: the best fit to the search, then products sold in India. */
 export async function searchOpenFoodFacts(query: string, limit = 20): Promise<FoodCandidate[]> {
   const q = query.trim();
   if (q.length < 3) return [];
@@ -82,8 +84,10 @@ export async function searchOpenFoodFacts(query: string, limit = 20): Promise<Fo
     const res = await fetch(url, { headers: OFF_HEADERS });
     if (!res.ok) return [];
     const body = (await res.json()) as { hits?: OffProduct[] };
+    const fit = (p: OffProduct) => searchTier(p.product_name ?? '', q);
     const hits = [...(body.hits ?? [])].sort(
-      (a, b) => Number(!!b.countries_tags?.includes('en:india')) - Number(!!a.countries_tags?.includes('en:india'))
+      (a, b) =>
+        fit(a) - fit(b) || Number(!!b.countries_tags?.includes('en:india')) - Number(!!a.countries_tags?.includes('en:india'))
     );
     // Many products have no nutrition filled in; those can't be logged.
     return hits

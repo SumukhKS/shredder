@@ -9,6 +9,7 @@ import { Field } from '@/components/ui/field';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Radius, Space } from '@/constants/theme';
+import { rankExercises } from '@/lib/search-rank';
 import { useQuery } from '@/lib/use-query';
 import { exercisesWithWaiting, fetchExerciseLibrary, matchesSearch, MUSCLE_LABELS } from '@/lib/workouts';
 import type { Exercise } from '@/types/db';
@@ -35,7 +36,10 @@ export function ExerciseList({
 
   const list = useMemo(() => {
     const q = query.trim();
-    return (data ?? []).filter((e) => (!muscle || e.primary_muscle === muscle) && (!q || matchesSearch(e.name, q)));
+    return rankExercises(
+      (data ?? []).filter((e) => (!muscle || e.primary_muscle === muscle) && (!q || matchesSearch(e.name, q))),
+      q
+    );
   }, [data, query, muscle]);
 
   const create = (
@@ -49,15 +53,18 @@ export function ExerciseList({
 
   return (
     <View style={{ flex: 1 }}>
-      <View style={{ paddingHorizontal: Space.lg, paddingBottom: Space.md }}>
-        <Field value={query} onChangeText={setQuery} placeholder="Search exercises" autoCorrect={false} />
+      {/* A solid header with a line under it, so the list scrolls cleanly away beneath the chips. */}
+      <View style={[styles.header, { backgroundColor: c.bg, borderColor: c.hairline }]}>
+        <View style={{ paddingHorizontal: Space.lg, paddingBottom: Space.md }}>
+          <Field value={query} onChangeText={setQuery} placeholder="Search exercises" autoCorrect={false} />
+        </View>
+        <ChipRow>
+          <Chip label="All" selected={!muscle} onPress={() => setMuscle(null)} />
+          {Object.entries(MUSCLE_LABELS).map(([k, label]) => (
+            <Chip key={k} label={label} selected={muscle === k} onPress={() => setMuscle(muscle === k ? null : k)} />
+          ))}
+        </ChipRow>
       </View>
-      <ChipRow>
-        <Chip label="All" selected={!muscle} onPress={() => setMuscle(null)} />
-        {Object.entries(MUSCLE_LABELS).map(([k, label]) => (
-          <Chip key={k} label={label} selected={muscle === k} onPress={() => setMuscle(muscle === k ? null : k)} />
-        ))}
-      </ChipRow>
 
       <FlatList
         data={list}
@@ -123,6 +130,7 @@ export function ExerciseInfoButton({ exercise }: { exercise: Exercise }) {
 }
 
 const styles = StyleSheet.create({
+  header: { paddingBottom: Space.md, borderBottomWidth: 1 },
   item: {
     flexDirection: 'row',
     alignItems: 'center',

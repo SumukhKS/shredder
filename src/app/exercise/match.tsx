@@ -14,6 +14,7 @@ import { useColors } from '@/components/ui/theme';
 import { Radius, Space } from '@/constants/theme';
 import { fetchAliases, fetchRecentMerges, mergeExercises, undoMerge } from '@/lib/auto-merge';
 import { nameScore, suggestMerges } from '@/lib/exercise-match';
+import { rankExercises } from '@/lib/search-rank';
 import { supabase } from '@/lib/supabase';
 import { useQuery } from '@/lib/use-query';
 import { fetchExercises, matchesSearch, MUSCLE_LABELS } from '@/lib/workouts';
@@ -24,9 +25,9 @@ import type { Exercise } from '@/types/db';
 /**
  * Your custom exercises that are already in the library (often made by a Hevy import before the
  * library had them), each with the library exercise it most likely is. Merging moves every logged
- * set, routine and record onto the library exercise and removes the custom copy. Sure matches are
- * merged by themselves once a day (see `autoMergeExercises`); custom exercises with no suggestion
- * can be pointed at any library exercise by hand.
+ * set, routine and record onto the library exercise and removes the custom copy. Exercises with
+ * exactly the same name are merged by themselves once a day (see `autoMergeExercises`); close
+ * matches start unticked, and any custom exercise can be pointed at a library one by hand.
  */
 export default function MatchExercises() {
   const c = useColors();
@@ -260,7 +261,11 @@ function LibraryPicker({
   const results = useMemo(() => {
     if (!custom) return [];
     const q = query.trim();
-    if (q) return library.filter((e) => matchesSearch(e.name, q)).slice(0, 60);
+    if (q)
+      return rankExercises(
+        library.filter((e) => matchesSearch(e.name, q)),
+        q
+      ).slice(0, 60);
     // Before typing: the library exercises whose names share the most with this one.
     return library
       .map((e) => ({ e, score: nameScore(custom.name, e.name) }))

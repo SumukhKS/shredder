@@ -2,7 +2,7 @@ import { fetchAliases, saveAlias } from '@/lib/auto-merge';
 import { parseCsv } from '@/lib/csv-import';
 import { inferMuscle } from '@/lib/body-shapes';
 import { toDay } from '@/lib/dates';
-import { aliasKey, bestMatch } from '@/lib/exercise-match';
+import { aliasKey, bestMatch, exactKey } from '@/lib/exercise-match';
 import { supabase } from '@/lib/supabase';
 import { withinLimit } from '@/lib/validate';
 import { fetchExercises } from '@/lib/workouts';
@@ -301,8 +301,6 @@ export function parseHevyCsv(text: string): HevyWorkout[] {
 // ---------------------------------------------------------------------------
 
 const norm = aliasKey;
-const base = (s: string) => norm(s.replace(/\s*\([^)]*\)\s*$/, ''));
-const hasEquipment = (s: string) => /\([^)]*\)\s*$/.test(s);
 
 const MUSCLES: Record<string, string> = {
   abdominals: 'core',
@@ -387,7 +385,7 @@ export async function matchExercises(
   // Your own exercises first, so a previous import's custom exercise is reused.
   const byName = new Map<string, Exercise>();
   const usable = [...all.filter((e) => e.created_by === null), ...all.filter((e) => e.created_by === userId)];
-  for (const e of usable) byName.set(norm(e.name), e);
+  for (const e of usable) byName.set(exactKey(e.name), e);
   const byId = new Map(usable.map((e) => [e.id, e]));
   const library = all.filter((e) => e.created_by === null);
 
@@ -401,22 +399,15 @@ export async function matchExercises(
       known.sets.push(...w.sets);
       continue;
     }
-    const key = norm(w.title);
-    const aliased = aliases.get(key);
-    const placed =
-      (aliased ? byId.get(aliased) : undefined) ??
-      byName.get(key) ??
-      // "Leg Press (Machine)" -> "Leg Press": only when one side names no equipment, so
-      // "Bench Press (Dumbbell)" never becomes "Bench Press (Barbell)".
-      library.find((e) => base(e.name) === base(w.title) && (!hasEquipment(e.name) || !hasEquipment(w.title)));
+    // Only your own earlier answer or exactly the same name places it; anything else gets asked about.
+    const aliased = aliases.get(norm(w.title));
+    const placed = (aliased ? byId.get(aliased) : undefined) ?? byName.get(exactKey(w.title));
     if (placed) {
       ids.set(w.title, placed.id);
       continue;
     }
-    // The same exercise spelled another way ("Bicep Curl" / "Biceps Curl", "Pull Up" / "Pull-Up").
     const m = bestMatch(w.title, undefined, library);
-    if (m?.exact) ids.set(w.title, m.match.id);
-    else unsure.set(w.title, { title: w.title, templateId: w.templateId, sets: [...w.sets], suggestion: m?.match ?? null });
+    unsure.set(w.title, { title: w.title, templateId: w.templateId, sets: [...w.sets], suggestion: m?.match ?? null });
   }
   return { ids, questions: [...unsure.values()], library };
 }

@@ -26,6 +26,7 @@ import {
   type ImportSource,
 } from '@/lib/hevy';
 import { useUnits, type WeightUnit } from '@/lib/units';
+import { rankExercises } from '@/lib/search-rank';
 import { matchesSearch, MUSCLE_LABELS } from '@/lib/workouts';
 import { useSession } from '@/stores/session';
 import type { Exercise } from '@/types/db';
@@ -279,7 +280,12 @@ function ReviewSheet({
   const byId = useMemo(() => new Map(library.map((e) => [e.id, e])), [library]);
   const results = useMemo(() => {
     const t = query.trim();
-    return t ? library.filter((e) => matchesSearch(e.name, t)).slice(0, 30) : [];
+    return t
+      ? rankExercises(
+          library.filter((e) => matchesSearch(e.name, t)),
+          t
+        ).slice(0, 30)
+      : [];
   }, [library, query]);
   const answer = (title: string, id: string | null) => setAnswers((a) => new Map(a).set(title, id));
 

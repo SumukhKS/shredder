@@ -338,7 +338,7 @@ blocked = false;
 try { await as(U, `insert into exercise_aliases (alias_key, exercise_id, user_id) values ('x', $1, $2)`, [curlLib, W]); } catch { blocked = true; }
 assert(blocked, "you can't write someone else's aliases");
 assert((await as(U, `select * from exercise_aliases where user_id = $1`, [W])).rows.length === 0, "you can't read someone else's aliases");
-assert((await one(U, `select count(*)::int n from exercise_aliases where user_id is null`)).n > 0, 'known renames are shared with everyone');
+assert((await one(U, `select count(*)::int n from exercise_aliases where user_id is null`)).n === 0, 'no shared renames: exercises map only on the exact name');
 assert((await one(W, `select exercise_alias_key('Hanging Leg Raises ( Weighted )') k`)).k === 'hanginglegraisesweighted', 'alias key ignores spacing and case');
 const mergeLog = await one(W, `select id from exercise_merge_log where undone_at is null order by merged_at desc limit 1`);
 blocked = false;
@@ -408,6 +408,11 @@ await as(V, `insert into foods (name, source, kcal_100g, protein_100g, carbs_100
 await db.exec(`insert into foods (name, source, kcal_100g, protein_100g, carbs_100g, fat_100g) values ('Zzqx oats verified', 'usda', 389, 17, 66, 7)`);
 const ranked = (await as(U, `select name from search_foods('oats zzqx')`)).rows.map((r) => r.name);
 assert(ranked.join() === 'Zzqx oats mine,Zzqx oats verified,Zzqx oats theirs', `search ranks own, verified, community (${ranked})`);
+// How well the name fits comes before whose food it is.
+await as(V, `insert into foods (name, source, kcal_100g, protein_100g, carbs_100g, fat_100g, created_by) values ('Qqzz', 'custom', 389, 17, 66, 7, '${V}')`);
+await db.exec(`insert into foods (name, source, kcal_100g, protein_100g, carbs_100g, fat_100g) values ('Spiced qqzz bowl', 'usda', 389, 17, 66, 7), ('Qqzz rice', 'usda', 389, 17, 66, 7)`);
+const fits = (await as(U, `select name from search_foods('qqzz')`)).rows.map((r) => r.name);
+assert(fits.join() === 'Qqzz,Qqzz rice,Spiced qqzz bowl', `search ranks exact, starts with, then a later word (${fits})`);
 assert((await as(U, `select name from search_foods('%')`)).rows.every((r) => r.name.includes('%')), 'a % in a search is plain text');
 assert((await as(U, `select name from search_foods('   ')`)).rows.length === 0, 'a blank search finds nothing');
 

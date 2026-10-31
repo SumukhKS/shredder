@@ -18,11 +18,11 @@ Built with Expo (React Native 0.88, SDK 58), Expo Router, Zustand and Supabase. 
 - Exercise pages: all-time bests, a progress chart (heaviest, estimated 1RM, volume, reps or time), every past session with its sets and medals, and how to do the movement
 - Exercise library of about 1,290 exercises from ExerciseDB, each with an animated demo and step-by-step instructions; search matches words in any order
 - Import from Hevy (API key or CSV export), or from any app's set-by-set CSV by matching its columns, with a preview first. Names it isn't sure about are asked about before anything is saved, and your choices are remembered
-- Custom duplicates can be merged into the library, history and PRs included, and a merge can be undone
+- Custom exercises with exactly the same name as a library one merge by themselves; close matches only merge if you choose them, history and PRs included, and a merge can be undone
 
 **Nutrition**
 - Food diary by meal with calorie and macro targets and rings
-- Fuel has three parts: Diary, My Recipes and My Foods
+- Food has three parts: Diary, My Recipes and My Foods
 - About 13,000 foods from USDA FoodData Central, plus Indian dishes; search ranks your own foods first, then verified ones, then community ones
 - Packaged food search and barcode scanning through Open Food Facts
 - Recipes, private to you: ingredients and servings, with the macros worked out, logged by the serving
@@ -37,7 +37,7 @@ Built with Expo (React Native 0.88, SDK 58), Expo Router, Zustand and Supabase. 
 
 **Today screen**
 - Cards for calories, workout, water, steps and sleep; rearrange, resize or hide them under Customize layout
-- The Train, Fuel and Profile tabs can be switched off from the same place
+- The Train, Food and Profile tabs can be switched off from the same place
 
 **Profile**
 - Lifetime workouts, diet days, step goals and week streak
@@ -107,7 +107,7 @@ src/
   app/                  Expo Router screens
     (auth)/welcome      Sign up / sign in
     onboarding          Goal and target setup
-    (tabs)/             Today, Train, Fuel, Profile
+    (tabs)/             Today, Train, Food, Profile
     workout/            Active logger, exercise picker, workout detail, day view, editor
     exercise/           Exercise history and how-to, matching custom exercises to the library
     habit/[kind]        Water, steps and sleep trackers

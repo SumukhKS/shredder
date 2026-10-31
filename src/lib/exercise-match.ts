@@ -161,9 +161,14 @@ export interface Candidate {
 export interface ExerciseMatch<T extends Candidate> {
   match: T;
   score: number;
-  /** Same exercise under another spelling: safe to merge without asking. */
+  /** Exactly the same name and way of logging: the only match used without asking. */
   exact: boolean;
 }
+
+/** The key for "exactly the same name": only upper/lower case and surrounding spaces are ignored. */
+export const exactKey = (name: string) => name.trim().toLowerCase();
+
+export const sameName = (a: string, b: string) => exactKey(a) === exactKey(b);
 
 /** The library exercise a name most likely means, or null when nothing is close enough to suggest. */
 export function bestMatch<T extends Candidate>(
@@ -172,6 +177,8 @@ export function bestMatch<T extends Candidate>(
   library: T[],
   { equipment, minScore = 0.6 }: { equipment?: string; minScore?: number } = {}
 ): ExerciseMatch<T> | null {
+  const same = library.find((e) => sameName(name, e.name) && (!kind || !e.kind || kind === e.kind));
+  if (same) return { match: same, score: 1, exact: true };
   let best: ExerciseMatch<T> | null = null;
   for (const e of library) {
     let score = nameScore(name, e.name, equipment, e.equipment);
@@ -182,7 +189,6 @@ export function bestMatch<T extends Candidate>(
       best = { match: e, score, exact: false };
     }
   }
-  if (best) best.exact = best.score >= 0.999 && (!kind || !best.match.kind || kind === best.match.kind);
   return best;
 }
 
@@ -190,13 +196,13 @@ export interface MergeSuggestion<T extends Candidate> {
   custom: T;
   match: T;
   score: number;
-  /** Ticked from the start: the same exercise, or as good as. */
+  /** Exactly the same name: merged without asking. Anything else waits for a person to choose it. */
   sure: boolean;
 }
 
 /**
- * For each custom exercise, the library exercise it most likely is. `aliases` holds known renames
- * and past choices (alias key -> exercise id), which count as sure matches.
+ * For each custom exercise, the library exercise it most likely is. `aliases` holds past choices
+ * (alias key -> exercise id), which are suggested first but never count as sure.
  */
 export function suggestMerges<T extends Candidate>(
   customs: T[],
@@ -206,15 +212,15 @@ export function suggestMerges<T extends Candidate>(
   const byId = new Map(library.map((e) => [e.id, e]));
   const out: MergeSuggestion<T>[] = [];
   for (const custom of customs) {
-    const aliased = aliases.get(aliasKey(custom.name));
-    const known = aliased ? byId.get(aliased) : undefined;
-    if (known) {
-      out.push({ custom, match: known, score: 1, sure: true });
+    const m = bestMatch(custom.name, custom.kind, library, { equipment: custom.equipment });
+    if (m?.exact) {
+      out.push({ custom, match: m.match, score: 1, sure: true });
       continue;
     }
-    const m = bestMatch(custom.name, custom.kind, library, { equipment: custom.equipment });
-    if (m)
-      out.push({ custom, match: m.match, score: m.score, sure: m.exact || (m.score >= 0.85 && m.match.kind === custom.kind) });
+    const aliased = aliases.get(aliasKey(custom.name));
+    const known = aliased ? byId.get(aliased) : undefined;
+    if (known) out.push({ custom, match: known, score: 1, sure: false });
+    else if (m) out.push({ custom, match: m.match, score: m.score, sure: false });
   }
   return out.sort((a, b) => Number(b.sure) - Number(a.sure) || b.score - a.score);
 }

@@ -35,6 +35,14 @@ export function formatDuration(totalSeconds: number): string {
   return `${s}s`;
 }
 
+/** A workout's length for summaries, without seconds: "1h 05m", "45m". */
+export function formatTimeShort(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
+}
+
 export function clock(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
   const h = Math.floor(s / 3600);

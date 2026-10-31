@@ -4,12 +4,12 @@ import { fetchExercises } from '@/lib/workouts';
 
 const LAST_RUN_KEY = 'shredder.autoMerge';
 
-/** Known renames and your own past choices: alias key -> exercise id. Your own win. */
+/** Your own past choices: alias key -> exercise id. */
 export async function fetchAliases(): Promise<Map<string, string>> {
-  const { data, error } = await supabase.from('exercise_aliases').select('alias_key, exercise_id, user_id');
+  const { data, error } = await supabase.from('exercise_aliases').select('alias_key, exercise_id').not('user_id', 'is', null);
   if (error) throw error;
-  const rows = (data ?? []) as { alias_key: string; exercise_id: string; user_id: string | null }[];
-  return new Map([...rows.filter((r) => !r.user_id), ...rows.filter((r) => r.user_id)].map((r) => [r.alias_key, r.exercise_id]));
+  const rows = (data ?? []) as { alias_key: string; exercise_id: string }[];
+  return new Map(rows.map((r) => [r.alias_key, r.exercise_id]));
 }
 
 /** Remember that an imported name means this exercise. */
@@ -29,22 +29,21 @@ export async function mergeExercises(pairs: { from: string; to: string }[]): Pro
 }
 
 /**
- * Custom exercises that are certainly library ones (same name under another spelling, or a known
- * Hevy rename) are merged into the library without asking, so their history, PRs and routines
- * use the library exercise. Close-but-unsure matches are left for the Match to library screen.
- * Runs at most once a day unless `force`; returns how many were merged.
+ * Custom exercises with exactly the same name as a library one are merged into it without asking,
+ * so their history, PRs and routines use the library exercise. Anything else, however close, is
+ * left for the Match to library screen. Runs at most once a day unless `force`; returns how many
+ * were merged.
  */
 export async function autoMergeExercises(userId: string, force = false): Promise<number> {
   const today = new Date().toDateString();
   if (!force && localStorage.getItem(LAST_RUN_KEY) === `${userId}|${today}`) return 0;
-  const [all, aliases] = await Promise.all([fetchExercises(), fetchAliases()]);
+  const all = await fetchExercises();
   const customs = all.filter((e) => e.created_by === userId);
   let merged = 0;
   if (customs.length) {
     const sure = suggestMerges(
       customs,
-      all.filter((e) => !e.created_by),
-      aliases
+      all.filter((e) => !e.created_by)
     ).filter((s) => s.sure);
     merged = await mergeExercises(sure.map((s) => ({ from: s.custom.id, to: s.match.id })));
   }
