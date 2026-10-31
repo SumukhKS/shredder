@@ -52,7 +52,7 @@ export default function Settings() {
         <SettingsRow
           icon="watch-outline"
           title="Integrations"
-          detail="Health Connect: steps and sleep from your watch or phone"
+          detail="Steps from your phone or watch, sleep from Health Connect"
           onPress={() => router.push('/settings/integrations')}
         />
         <SettingsRow

@@ -76,3 +76,25 @@ test('workouts group by date and name, with sets in file order', () => {
   );
   assert.equal(again.workouts[0].externalId, out.workouts[0].externalId);
 });
+
+test('semicolons and tabs work as separators, and commas inside quotes stay put', () => {
+  assert.deepEqual(parseCsv('Date;Weight\n2026-10-01;62,5'), [
+    ['Date', 'Weight'],
+    ['2026-10-01', '62,5'],
+  ]);
+  assert.deepEqual(parseCsv('Date\tReps\n2026-10-01\t8')[1], ['2026-10-01', '8']);
+  assert.deepEqual(parseCsv('"a;b;c",d\n1,2')[0], ['a;b;c', 'd']);
+});
+
+test('a unit on each row beats the choice for the file', () => {
+  const rows = parseCsv(
+    'Date,Exercise,Weight,Weight Unit\n2026-10-01,Bench,100,lbs\n2026-10-01,Bench,50,kg\n2026-10-01,Bench,10,'
+  );
+  const map = guessColumns(rows[0], WORKOUT_FIELDS);
+  assert.deepEqual([map.weight, map.weightUnit], [2, 3]);
+  const sets = buildWorkouts(rows.slice(1), map, { weightFactor: 1, metresPerUnit: 1 }).workouts[0].exercises[0].sets;
+  assert.deepEqual(
+    sets.map((x) => Math.round(x.weightKg ?? 0)),
+    [45, 50, 10]
+  );
+});

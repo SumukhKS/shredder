@@ -71,6 +71,7 @@ export default function HabitScreen() {
   const d = snap.data;
   const value = kind === 'water' ? (d?.waterMl ?? 0) : kind === 'steps' ? (d?.health?.steps ?? 0) : (d?.health?.sleep_min ?? 0);
   const target = meta.target(profile);
+  const sensorSteps = useAppSettings.getState().stepsSource === 'phone_sensor';
   const synced = d?.health?.source === 'health_connect' || d?.health?.source === 'phone_sensor';
   const pct = target ? value / target : 0;
 
@@ -135,7 +136,9 @@ export default function HabitScreen() {
             </AppText>
             {synced ? (
               <AppText variant="small" color="textMuted">
-                Synced from Health Connect
+                {d?.health?.source === 'phone_sensor' && kind === 'steps'
+                  ? 'Counted by this phone'
+                  : 'Synced from Health Connect'}
               </AppText>
             ) : null}
           </Card>
@@ -194,7 +197,11 @@ export default function HabitScreen() {
         ) : null}
 
         {/* Once Health Connect is linked the data just appears; the card only shows while something needs doing. */}
-        {kind !== 'water' && health && health !== 'connected' && health !== 'unsupported' ? (
+        {kind !== 'water' &&
+        !(kind === 'steps' && sensorSteps) &&
+        health &&
+        health !== 'connected' &&
+        health !== 'unsupported' ? (
           <Card tone="flat" style={{ gap: Space.md }}>
             <AppText variant="bodyBold">{SYNC_LABELS[health]}</AppText>
             <AppText variant="small" color="textMuted">

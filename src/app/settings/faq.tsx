@@ -22,7 +22,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: 'Where do steps and sleep come from?',
-    a: 'Health Connect on Android. Connect it in Settings > Integrations, and turn on Health Connect sync in your watch or fitness app.',
+    a: 'Sleep comes from Health Connect on Android: connect it in Settings > Integrations, and turn on Health Connect sync in your watch or fitness app. Steps can come from there too, or from the sensor in your phone, which you can choose in the same place. The two are never added together.',
   },
   {
     q: 'Can I switch to pounds or inches?',

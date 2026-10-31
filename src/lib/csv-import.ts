@@ -2,6 +2,18 @@
 import type { HevySet, HevyWorkout } from './hevy';
 import { parseAmount } from './validate';
 
+/** Which character separates the columns: some apps and phone regions use semicolons or tabs. Quoted text doesn't count. */
+function separatorOf(text: string): string {
+  const counts: Record<string, number> = { ',': 0, ';': 0, '\t': 0 };
+  let quoted = false;
+  for (const ch of text) {
+    if (ch === '"') quoted = !quoted;
+    else if (!quoted && (ch === '\n' || ch === '\r')) break;
+    else if (!quoted && ch in counts) counts[ch]++;
+  }
+  return counts[';'] > counts[','] && counts[';'] >= counts['\t'] ? ';' : counts['\t'] > counts[','] ? '\t' : ',';
+}
+
 /** RFC 4180 CSV: quoted fields, doubled quotes, newlines inside quotes. */
 export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
@@ -9,6 +21,7 @@ export function parseCsv(text: string): string[][] {
   let field = '';
   let quoted = false;
   const src = text.replace(/^﻿/, '');
+  const separator = separatorOf(src);
   for (let i = 0; i < src.length; i++) {
     const ch = src[i];
     if (quoted) {
@@ -22,7 +35,7 @@ export function parseCsv(text: string): string[][] {
       }
     } else if (ch === '"') {
       quoted = true;
-    } else if (ch === ',') {
+    } else if (ch === separator) {
       row.push(field);
       field = '';
     } else if (ch === '\n' || ch === '\r') {
@@ -181,6 +194,7 @@ export const WORKOUT_FIELDS: CsvField[] = [
   },
   { key: 'name', label: 'Workout name', names: ['workout name', 'workout', 'title', 'routine', 'session'] },
   { key: 'weight', label: 'Weight', names: ['weight', 'load', 'kg', 'lbs', 'lb'] },
+  { key: 'weightUnit', label: 'Weight unit, if each row says', names: ['weight unit', 'unit', 'units'] },
   { key: 'reps', label: 'Reps', names: ['reps', 'repetitions', 'rep'] },
   { key: 'seconds', label: 'Set time (seconds)', names: ['seconds', 'duration', 'time seconds'] },
   { key: 'distance', label: 'Distance', names: ['distance', 'meters', 'metres'] },
@@ -214,10 +228,13 @@ export function buildWorkouts(rows: string[][], map: ColumnMap, units: { weightF
       w.exercises.push(ex);
     }
     const weight = amount(r, 'weight');
+    // A row that names its own unit beats the choice for the whole file.
+    const unit = map.weightUnit != null ? (r[map.weightUnit] ?? '').trim().toLowerCase() : '';
+    const factor = /^(lb|pound)/.test(unit) ? 0.45359237 : /^kg|^kilo/.test(unit) ? 1 : units.weightFactor;
     const distance = amount(r, 'distance');
     const set: HevySet = {
       type: 'normal',
-      weightKg: weight != null ? weight * units.weightFactor : null,
+      weightKg: weight != null ? weight * factor : null,
       reps: amount(r, 'reps'),
       distanceM: distance != null ? distance * units.metresPerUnit : null,
       durationS: amount(r, 'seconds'),
