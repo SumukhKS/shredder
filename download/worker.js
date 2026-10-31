@@ -1,7 +1,7 @@
 // Download link for the Android app: https://shredder.shredderfit.workers.dev/Shredder.apk
 // Streams the latest EAS build so the file saves as Shredder.apk instead of Expo's
 // "application-<id>.apk". After each new APK build, point LATEST_APK at its artifact URL.
-const LATEST_APK = 'https://expo.dev/artifacts/eas/f2cXkNLJPk3q4IAhVsALUk2-B6NyQfQ4EHtFaCxujY8.apk';
+const LATEST_APK = 'https://expo.dev/artifacts/eas/hnqtWE5XYjJbPW9Cgo0rDYbSXzgBLZGM5fBLTLEkhPY.apk';
 
 const escapeHtml = (text) =>
   String(text ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
