@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Radius, Space, withAlpha } from '@/constants/theme';
-import { dayLabel, formatDuration } from '@/lib/dates';
+import { dayLabel, formatDuration, formatTimeShort } from '@/lib/dates';
 import { formatVolume, useUnits } from '@/lib/units';
 import { describeSet, summarizeSets, type ExerciseLog } from '@/lib/workouts';
 import type { WorkoutSummary } from '@/types/db';
@@ -44,7 +44,7 @@ export function WorkoutCard({
             {workout.name}
           </AppText>
           <AppText variant="small" color="textMuted">
-            {[showDay ? dayLabel(workout.day) : null, timeOf(workout.started_at), formatDuration(workout.duration_s)]
+            {[showDay ? dayLabel(workout.day) : null, timeOf(workout.started_at), formatTimeShort(workout.duration_s)]
               .filter(Boolean)
               .join(', ')}
           </AppText>
@@ -82,7 +82,7 @@ export function WorkoutDetailCard({
     <Card style={{ gap: Space.lg }}>
       <WorkoutHeader workout={workout} onOptions={onOptions} />
       <View style={[styles.stats, { borderColor: c.hairline }]}>
-        <Stat label="Duration" value={formatDuration(workout.duration_s)} />
+        <Stat label="Time" value={formatDuration(workout.duration_s)} />
         <Stat label="Volume" value={formatVolume(Number(workout.total_volume), units.weight)} />
         <Stat label="Sets" value={String(workout.total_sets)} />
         <Stat label="PRs" value={String(workout.pr_count)} />

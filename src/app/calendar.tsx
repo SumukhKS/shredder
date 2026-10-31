@@ -13,7 +13,7 @@ import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Space, withAlpha } from '@/constants/theme';
 import { fetchDay, withWaiting } from '@/lib/daily';
-import { addDays, firstOfMonth, formatDuration, fromDay, mondayOf, toDay } from '@/lib/dates';
+import { addDays, firstOfMonth, formatTimeShort, fromDay, mondayOf, toDay } from '@/lib/dates';
 import { HABITS } from '@/lib/habits';
 import { supabase } from '@/lib/supabase';
 import { useQuery } from '@/lib/use-query';
@@ -241,7 +241,7 @@ export default function Calendar() {
                   {s.workouts.length === 1 ? 'Workout' : `${s.workouts.length} workouts`}
                 </AppText>
                 <AppText variant="small" color="textMuted">
-                  {formatDuration(s.workouts.reduce((t, w) => t + w.duration_s, 0))},{' '}
+                  {formatTimeShort(s.workouts.reduce((t, w) => t + w.duration_s, 0))},{' '}
                   {formatVolume(
                     s.workouts.reduce((t, w) => t + Number(w.total_volume), 0),
                     units.weight

@@ -18,7 +18,7 @@ import { useQuery } from '@/lib/use-query';
 import { useSession } from '@/stores/session';
 import type { FoodLog } from '@/types/db';
 
-/** One day's food, shown on the Fuel tab and when a day is opened from the Calendar. */
+/** One day's food, shown on the Food tab and when a day is opened from the Calendar. */
 export function useFoodDay(day: string) {
   return useQuery(() => fetchDay(day), day, { cache: 'fuel', overlay: withWaiting });
 }

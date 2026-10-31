@@ -26,7 +26,7 @@ import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Radius, Space, withAlpha } from '@/constants/theme';
 import { fetchDay, withWaiting, type Habit } from '@/lib/daily';
-import { formatDuration, greeting, toDay } from '@/lib/dates';
+import { formatTimeShort, greeting, toDay } from '@/lib/dates';
 import { HABITS } from '@/lib/habits';
 import { backfillHealth, syncHealthThrottled } from '@/lib/health';
 import { supabase } from '@/lib/supabase';
@@ -123,7 +123,7 @@ export default function Today() {
   };
 
   const routes: Record<CardId, Href> = {
-    calories: '/fuel',
+    calories: { pathname: '/food/day', params: { day: today } },
     water: { pathname: '/habit/[kind]', params: { kind: 'water' } },
     steps: { pathname: '/habit/[kind]', params: { kind: 'steps' } },
     sleep: { pathname: '/habit/[kind]', params: { kind: 'sleep' } },
@@ -188,22 +188,22 @@ export default function Today() {
         const sets = workouts.reduce((n, w) => n + w.total_sets, 0) + completedSetCount(active);
         const volume = workouts.reduce((v, w) => v + Number(w.total_volume), 0) + liveVolume(active);
         const seconds = workouts.reduce((t, w) => t + w.duration_s, 0);
-        const count = workouts.length + (active ? 1 : 0);
+        const logged = workouts.length > 0;
         return (
           <LargeCard
             onPress={onPress}
-            ring={count ? 1 : 0}
-            value={String(count)}
-            unit={count === 1 ? 'workout' : 'workouts'}
+            ring={logged || active ? 1 : 0}
+            ringIcon={logged ? 'checkmark' : active ? 'play' : 'barbell'}
             headline={active ? active.name : workouts.length ? workouts.map((w) => w.name).join(', ') : 'No workout yet today'}
             rows={[
               { label: 'Sets', value: sets.toLocaleString(), progress: sets ? 1 : 0, color: c.primary },
               { label: 'Volume', value: formatVolume(volume, units.weight), progress: volume ? 1 : 0, color: c.primary },
-              { label: 'Duration', value: formatDuration(seconds), progress: seconds ? 1 : 0, color: c.primary },
+              { label: 'Time', value: formatTimeShort(seconds), progress: seconds ? 1 : 0, color: c.primary },
             ]}
-            action={active ? 'Resume workout' : 'Start workout'}
-            actionIcon={active ? 'play' : 'add'}
+            action={active ? 'Resume workout' : logged ? 'View Workout' : 'Add Workout'}
+            actionIcon={active ? 'play' : logged ? 'chevron-forward' : 'add'}
             onAction={() => {
+              if (!active && logged) return router.push(routes.workout);
               if (!active) startWorkout();
               router.push('/workout/active');
             }}
@@ -489,6 +489,7 @@ interface LargeRow {
 /** Large: the same layout for every card, with a ring, a headline, three rows and one action. */
 function LargeCard({
   ring,
+  ringIcon,
   value,
   unit,
   headline,
@@ -499,8 +500,10 @@ function LargeCard({
   onPress,
 }: {
   ring: number;
-  value: string;
-  unit: string;
+  /** Drawn in the ring in place of a number. */
+  ringIcon?: keyof typeof Ionicons.glyphMap;
+  value?: string;
+  unit?: string;
   headline: string;
   rows: LargeRow[];
   action: string;
@@ -513,12 +516,18 @@ function LargeCard({
     <Card onPress={onPress} style={{ gap: Space.lg }}>
       <View style={styles.row}>
         <Ring value={ring} color={c.primary} size={104} stroke={12}>
-          <AppText variant="stat" style={{ fontSize: 22 }} numberOfLines={1} adjustsFontSizeToFit>
-            {value}
-          </AppText>
-          <AppText variant="small" color="textMuted" style={{ fontSize: 11 }}>
-            {unit}
-          </AppText>
+          {ringIcon ? (
+            <Ionicons name={ringIcon} size={40} color={ring ? c.primary : c.textMuted} />
+          ) : (
+            <>
+              <AppText variant="stat" style={{ fontSize: 22 }} numberOfLines={1} adjustsFontSizeToFit>
+                {value}
+              </AppText>
+              <AppText variant="small" color="textMuted" style={{ fontSize: 11 }}>
+                {unit}
+              </AppText>
+            </>
+          )}
         </Ring>
         <View style={{ flex: 1, gap: Space.sm }}>
           <AppText variant="h3" numberOfLines={2}>

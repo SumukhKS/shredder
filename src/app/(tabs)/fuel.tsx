@@ -7,10 +7,10 @@ import { SwipeDays } from '@/components/swipe-days';
 import { Button, IconButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Segmented } from '@/components/ui/chips';
-import { LoadError, EmptyState, Screen } from '@/components/ui/screen';
+import { DayHeading, LoadError, EmptyState, Screen } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { Space } from '@/constants/theme';
-import { dayLabel, toDay } from '@/lib/dates';
+import { toDay } from '@/lib/dates';
 import { enqueue } from '@/lib/outbox';
 import { recipeAsFood, recipeTotals } from '@/lib/recipe-math';
 import { fetchMyFoods, fetchRecipes, foodsWithWaiting, recipesWithWaiting } from '@/lib/recipes';
@@ -36,12 +36,10 @@ export default function Fuel() {
 function Diary({ tabs, day, setDay }: { tabs: React.ReactNode; day: string; setDay: (d: string) => void }) {
   const q = useFoodDay(day);
   return (
-    <Screen refreshing={q.refreshing} onRefresh={q.refresh}>
+    <Screen title="Food" refreshing={q.refreshing} onRefresh={q.refresh}>
       <LoadError q={q} what="your diary" />
       {tabs}
-      <AppText variant="h3" align="center">
-        {dayLabel(day)}
-      </AppText>
+      <DayHeading day={day} />
       <SwipeDays day={day} onChange={setDay}>
         <FoodDiary day={day} data={q.data} />
       </SwipeDays>
@@ -53,7 +51,7 @@ function Recipes({ tabs, day }: { tabs: React.ReactNode; day: string }) {
   const router = useRouter();
   const q = useQuery(fetchRecipes, '', { cache: 'recipes', overlay: recipesWithWaiting });
   return (
-    <Screen refreshing={q.refreshing} onRefresh={q.refresh}>
+    <Screen title="Food" refreshing={q.refreshing} onRefresh={q.refresh}>
       {tabs}
       <Button label="New recipe" icon="add" variant="secondary" onPress={() => router.push('/recipe/edit')} />
       {q.data?.length === 0 ? (
@@ -113,7 +111,7 @@ function Foods({ tabs }: { tabs: React.ReactNode }) {
   }
 
   return (
-    <Screen refreshing={q.refreshing} onRefresh={q.refresh}>
+    <Screen title="Food" refreshing={q.refreshing} onRefresh={q.refresh}>
       {tabs}
       <AppText variant="small" color="textMuted">
         Foods you create are shared with everyone using Shredder, so check the numbers against the label.

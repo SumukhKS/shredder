@@ -11,13 +11,13 @@ import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { IconTile } from '@/components/ui/icon-tile';
 import { Ring } from '@/components/ui/progress';
-import { LoadError, Screen, SectionHeader } from '@/components/ui/screen';
+import { DayHeading, LoadError, Screen, SectionHeader } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { SwipeDays } from '@/components/swipe-days';
 import { Radius, Space } from '@/constants/theme';
 import { addWater, fetchDay, fetchHabitHistory, setWaterTotal, undoWater, type Habit, withWaiting } from '@/lib/daily';
-import { dayLabel, addDays, fromDay, mondayOf, toDay } from '@/lib/dates';
+import { addDays, fromDay, mondayOf, toDay } from '@/lib/dates';
 import { HABITS, isHabit } from '@/lib/habits';
 import { backfillHealth, connectHealth, healthStatus, syncHealth, type HealthStatus } from '@/lib/health';
 import { refreshStreaks } from '@/lib/streak';
@@ -116,9 +116,7 @@ export default function HabitScreen() {
       }}>
       <LoadError q={snap} what="this day" />
       <Stack.Screen options={{ title: meta.title }} />
-      <AppText variant="h3" align="center">
-        {dayLabel(day)}
-      </AppText>
+      <DayHeading day={day} />
       <SwipeDays day={day} onChange={setDay}>
         <Animated.View entering={FadeInDown.duration(400)}>
           <Card tone="hero" style={styles.hero}>
@@ -232,6 +230,7 @@ export default function HabitScreen() {
               values={values}
               labels={week.data?.map((p) => fromDay(p.day).toLocaleDateString(undefined, { weekday: 'narrow' })) ?? []}
               color={c.primary}
+              colorAll
             />
             <AppText variant="small" color="textMuted">
               Average {average ? meta.format(average) : '–'} on the days you logged

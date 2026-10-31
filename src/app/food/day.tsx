@@ -2,12 +2,11 @@ import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 
 import { FoodDiary, useFoodDay } from '@/components/food-diary';
-import { LoadError, Screen } from '@/components/ui/screen';
-import { AppText } from '@/components/ui/text';
+import { DayHeading, LoadError, Screen } from '@/components/ui/screen';
 import { SwipeDays } from '@/components/swipe-days';
-import { dayLabel, toDay } from '@/lib/dates';
+import { toDay } from '@/lib/dates';
 
-/** The Food diary for a day opened from the Calendar. */
+/** The Food diary for one day, opened from the Today card or the Calendar. */
 export default function FoodDay() {
   const params = useLocalSearchParams<{ day?: string }>();
   const [day, setDay] = useState(params.day ?? toDay());
@@ -16,9 +15,7 @@ export default function FoodDay() {
   return (
     <Screen padTop={false} refreshing={q.refreshing} onRefresh={q.refresh}>
       <LoadError q={q} what="this day" />
-      <AppText variant="h3" align="center">
-        {dayLabel(day)}
-      </AppText>
+      <DayHeading day={day} />
       <SwipeDays day={day} onChange={setDay}>
         <FoodDiary day={day} data={q.data} />
       </SwipeDays>

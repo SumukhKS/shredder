@@ -151,7 +151,7 @@ export default function WorkoutDetail() {
       <WorkoutHeader workout={data} />
 
       <Card style={styles.strip}>
-        <Stat icon="stopwatch-outline" label="Duration" value={formatDuration(data.duration_s)} />
+        <Stat icon="stopwatch-outline" label="Time" value={formatDuration(data.duration_s)} />
         <View style={[styles.divider, { backgroundColor: c.border }]} />
         <Stat icon="barbell-outline" label="Volume" value={formatVolume(Number(data.total_volume), units.weight)} />
         <View style={[styles.divider, { backgroundColor: c.border }]} />

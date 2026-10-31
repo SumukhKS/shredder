@@ -8,18 +8,18 @@ import { MenuSheet } from '@/components/menu-sheet';
 import { SwipeDays } from '@/components/swipe-days';
 import { WorkoutDetailCard } from '@/components/workout-card';
 import { Card } from '@/components/ui/card';
-import { LoadError, EmptyState, Screen } from '@/components/ui/screen';
+import { DayHeading, LoadError, EmptyState, Screen } from '@/components/ui/screen';
 import { AppText } from '@/components/ui/text';
 import { useColors } from '@/components/ui/theme';
 import { Space } from '@/constants/theme';
-import { dayLabel, formatDuration, toDay } from '@/lib/dates';
+import { toDay } from '@/lib/dates';
 import { supabase } from '@/lib/supabase';
 import { useQuery } from '@/lib/use-query';
 import { fetchWorkoutExercises } from '@/lib/workouts';
 import { completedSetCount, useWorkout } from '@/stores/workout';
 import type { Exercise, WorkoutSummary } from '@/types/db';
 
-/** A week of training at a glance, then everything done on the chosen day, set by set. */
+/** Everything done on the chosen day, set by set. */
 export default function TrainingDay() {
   const c = useColors();
   const router = useRouter();
@@ -68,26 +68,12 @@ export default function TrainingDay() {
 
   const workouts = q.data?.workouts ?? [];
   const live = active && day === toDay() ? active : null;
-  const time = workouts.reduce((t, w) => t + w.duration_s, 0);
-  const exerciseCount = workouts.reduce((n, w) => n + (q.data?.exercises[w.id]?.length ?? 0), 0);
 
   return (
     <Screen padTop={false} refreshing={q.refreshing} onRefresh={q.refresh}>
       <LoadError q={q} what="this day" />
-      <AppText variant="h3" align="center">
-        {dayLabel(day)}
-      </AppText>
+      <DayHeading day={day} />
       <SwipeDays day={day} onChange={setDay}>
-        {workouts.length ? (
-          <Animated.View entering={FadeInDown.duration(400)}>
-            <Card tone="hero" style={styles.totals}>
-              <Total label={workouts.length === 1 ? 'Workout' : 'Workouts'} value={String(workouts.length)} />
-              <Total label={exerciseCount === 1 ? 'Exercise' : 'Exercises'} value={String(exerciseCount)} />
-              <Total label="Time" value={formatDuration(time)} />
-            </Card>
-          </Animated.View>
-        ) : null}
-
         {live ? (
           <Card onPress={() => router.push('/workout/active')} style={styles.live}>
             <Ionicons name="play" size={18} color={c.text} />
@@ -139,18 +125,6 @@ export default function TrainingDay() {
   );
 }
 
-function Total({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
-      <AppText variant="stat">{value}</AppText>
-      <AppText variant="small" color="textMuted">
-        {label}
-      </AppText>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  totals: { flexDirection: 'row' },
   live: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
 });

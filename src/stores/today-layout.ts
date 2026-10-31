@@ -23,7 +23,7 @@ export const CARD_NAMES: Record<CardId, string> = {
 
 /** Bottom-bar tabs that can be hidden. Today always stays, since the layout is edited there. */
 export type TabId = 'train' | 'fuel' | 'profile';
-export const TAB_NAMES: Record<TabId, string> = { train: 'Train', fuel: 'Fuel', profile: 'Profile' };
+export const TAB_NAMES: Record<TabId, string> = { train: 'Train', fuel: 'Food', profile: 'Profile' };
 
 const DEFAULT: CardPref[] = [
   { id: 'calories', visible: true, size: 'large' },

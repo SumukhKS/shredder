@@ -30,7 +30,7 @@ const EQUIPMENT: [string, string][] = [
 const KINDS: [ExerciseKind, string][] = [
   ['weight_reps', 'Weight and reps'],
   ['bodyweight_reps', 'Bodyweight reps'],
-  ['duration', 'Duration'],
+  ['duration', 'Time'],
   ['distance_time', 'Distance and time'],
 ];
 

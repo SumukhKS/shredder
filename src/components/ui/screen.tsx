@@ -5,6 +5,7 @@ import Animated, { type AnimatedRef } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Space } from '@/constants/theme';
+import { dayLabel, toDay } from '@/lib/dates';
 
 import { AppText } from './text';
 import { useColors } from './theme';
@@ -93,6 +94,12 @@ export function Screen({
       {footer}
     </KeyboardAvoidingView>
   );
+}
+
+/** Which day a swipeable page is on. Today needs no heading; another day shows its date. */
+export function DayHeading({ day }: { day: string }) {
+  if (day === toDay()) return null;
+  return <AppText variant="h3">{dayLabel(day)}</AppText>;
 }
 
 export function SectionHeader({ title, action }: { title: string; action?: React.ReactNode }) {

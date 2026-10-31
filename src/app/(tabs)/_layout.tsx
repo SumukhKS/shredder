@@ -16,7 +16,7 @@ import { useWorkout } from '@/stores/workout';
 const TABS: { name: string; label: string; icon: keyof typeof Ionicons.glyphMap; iconOn: keyof typeof Ionicons.glyphMap }[] = [
   { name: 'index', label: 'Today', icon: 'flash-outline', iconOn: 'flash' },
   { name: 'train', label: 'Train', icon: 'barbell-outline', iconOn: 'barbell' },
-  { name: 'fuel', label: 'Fuel', icon: 'restaurant-outline', iconOn: 'restaurant' },
+  { name: 'fuel', label: 'Food', icon: 'restaurant-outline', iconOn: 'restaurant' },
   { name: 'profile', label: 'Profile', icon: 'person-circle-outline', iconOn: 'person-circle' },
 ];
 
